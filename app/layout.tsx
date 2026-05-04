@@ -23,6 +23,12 @@ export default function RootLayout({
             </Link>
             <nav className="flex items-center gap-2" aria-label="Primary navigation">
               <Link
+                href="/privacy"
+                className="focus-block rounded-md px-3 py-2 text-sm font-black text-ink transition hover:bg-white"
+              >
+                Privacy
+              </Link>
+              <Link
                 href="/workspace"
                 className="focus-block rounded-md border-2 border-ink bg-ink px-4 py-2 text-sm font-black text-white transition hover:-translate-y-0.5 hover:bg-gray-900"
               >
