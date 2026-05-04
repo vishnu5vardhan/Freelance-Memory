@@ -50,7 +50,7 @@ const sections = [
   },
   {
     title: "Contact",
-    body: ["Questions or support requests can be sent to support@freelancer-memory.com."]
+    body: ["Questions or support requests can be sent to vishnu.chinnayeluka123@gmail.com."]
   }
 ];
 
