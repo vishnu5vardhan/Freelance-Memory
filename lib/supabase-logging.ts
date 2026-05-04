@@ -9,9 +9,9 @@ export async function logGenerationEvent(
   usage: Usage
 ) {
   const supabaseUrl = (process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL)?.replace(/\/$/, "");
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const apiKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-  if (!supabaseUrl || !serviceRoleKey) {
+  if (!supabaseUrl || !apiKey) {
     return;
   }
 
@@ -22,8 +22,8 @@ export async function logGenerationEvent(
     await fetch(`${supabaseUrl}/rest/v1/fm_generation_events`, {
       method: "POST",
       headers: {
-        apikey: serviceRoleKey,
-        Authorization: `Bearer ${serviceRoleKey}`,
+        apikey: apiKey,
+        Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
         Prefer: "return=minimal"
       },
