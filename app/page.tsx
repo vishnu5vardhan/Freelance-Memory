@@ -1,101 +1,148 @@
 import Link from "next/link";
 
-const situations = [
-  "First reply",
-  "Pricing answer",
-  "Scope cleanup",
-  "Follow-up",
-  "Push back",
-  "Profile form"
+const memories = [
+  {
+    label: "Business",
+    line: "Who you are. What you charge. What you won't do.",
+    bg: "bg-signal",
+  },
+  {
+    label: "Client",
+    line: "Who they are. Where they came from. What they want.",
+    bg: "bg-proof",
+  },
+  {
+    label: "Project",
+    line: "What's agreed. What's excluded. Where the money risks are.",
+    bg: "bg-white",
+  },
 ];
-
-const memory = ["Services", "Pricing", "Proof", "Process", "Boundaries", "Voice"];
 
 export default function HomePage() {
   return (
-    <main className="overflow-hidden">
+    <main>
       <section className="relative border-b border-ink/10 bg-paper">
-        <div className="memory-grid absolute inset-0 opacity-50" aria-hidden="true" />
-        <div className="relative mx-auto grid max-w-7xl gap-10 px-4 py-14 sm:px-6 lg:grid-cols-[0.95fr_1.05fr] lg:py-20">
-          <div className="flex flex-col justify-center">
-            <p className="w-fit border-2 border-ink bg-signal px-3 py-1 text-sm font-black uppercase text-ink shadow-[4px_4px_0_#111827]">
-              Local-first AI workspace
-            </p>
-            <h1 className="mt-5 max-w-3xl text-5xl font-black leading-none tracking-normal text-ink sm:text-6xl lg:text-7xl">
-              Save your freelance business once
-            </h1>
-            <p className="mt-6 max-w-2xl text-lg leading-8 text-gray-700 sm:text-xl">
-              Paste any client message. Get a reply that uses your services, pricing, proof, process, boundaries, and voice.
-            </p>
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <Link
-                href="/workspace"
-                className="focus-block rounded-md border-2 border-ink bg-ink px-6 py-3 text-center text-base font-black text-white shadow-[5px_5px_0_#f5d547] transition hover:-translate-y-0.5 hover:bg-gray-900"
-              >
-                Build memory
-              </Link>
-              <a
-                href="#structure"
-                className="focus-block rounded-md border-2 border-ink bg-white px-6 py-3 text-center text-base font-black text-ink transition hover:-translate-y-0.5 hover:bg-signal"
-              >
-                See structure
-              </a>
-            </div>
-          </div>
+        <div className="memory-grid absolute inset-0 opacity-40" aria-hidden="true" />
+        <div className="relative mx-auto max-w-5xl px-4 py-16 sm:px-6 lg:py-24">
+          <p className="w-fit border-2 border-ink bg-signal px-3 py-1 text-sm font-black uppercase text-ink shadow-[4px_4px_0_#111827]">
+            Local-first · No account needed
+          </p>
 
-          <div className="self-center border-2 border-ink bg-white shadow-blockLg">
-            <div className="flex items-center justify-between border-b-2 border-ink bg-[#f3f0ea] px-4 py-3">
-              <div className="flex gap-2" aria-hidden="true">
-                <span className="h-3 w-3 rounded-full border border-ink bg-danger" />
-                <span className="h-3 w-3 rounded-full border border-ink bg-signal" />
-                <span className="h-3 w-3 rounded-full border border-ink bg-proof" />
-              </div>
-              <p className="text-xs font-black uppercase text-gray-600">memory -&gt; reply</p>
-            </div>
-            <div className="grid gap-0 sm:grid-cols-[0.8fr_1.2fr]">
-              <div className="border-b-2 border-ink bg-paper p-5 sm:border-b-0 sm:border-r-2">
-                <p className="text-sm font-black uppercase text-gray-600">Business memory</p>
-                <div className="mt-4 grid gap-2">
-                  {memory.map((item) => (
-                    <div key={item} className="border border-ink/15 bg-white px-3 py-3 text-sm font-black text-ink">
-                      {item}
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div className="p-5">
-                <p className="text-sm font-black uppercase text-gray-600">Client message</p>
-                <div className="mt-3 border-2 border-ink bg-paper p-4 text-sm font-bold leading-6 text-gray-800">
-                  Hey, can you build our landing page? Need it fast. Budget?
-                </div>
-                <p className="mt-5 text-sm font-black uppercase text-gray-600">Generated reply</p>
-                <div className="mt-3 border-2 border-ink bg-ink p-4 text-sm font-bold leading-6 text-white">
-                  Thanks. I can help, but I need scope before a real quote. My landing page projects start at $X and include...
-                </div>
-              </div>
-            </div>
+          <h1 className="mt-6 text-5xl font-black leading-none tracking-tight text-ink sm:text-6xl lg:text-7xl">
+            Your freelance business
+            <br />
+            runs on memory.
+            <br />
+            <span className="text-gray-400">Right now, that&rsquo;s your head.</span>
+          </h1>
+
+          <p className="mt-6 max-w-xl text-xl font-bold leading-8 text-gray-700">
+            Keep your rates, clients, projects, and scope in one place — so every client conversation starts from the truth.
+          </p>
+
+          <div className="mt-10 flex flex-col gap-3 sm:flex-row">
+            <Link
+              href="/workspace"
+              className="focus-block rounded-md border-2 border-ink bg-ink px-8 py-4 text-center text-lg font-black text-white shadow-[5px_5px_0_#f5d547] transition hover:-translate-y-0.5 hover:bg-gray-900"
+            >
+              Build my memory →
+            </Link>
+            <a
+              href="#memory"
+              className="focus-block rounded-md border-2 border-ink bg-white px-8 py-4 text-center text-lg font-black text-ink transition hover:-translate-y-0.5 hover:bg-signal"
+            >
+              See what it holds
+            </a>
           </div>
         </div>
       </section>
 
-      <section id="structure" className="bg-white">
-        <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6">
-          <div className="max-w-2xl">
-            <p className="text-sm font-black uppercase text-blue-700">What it speaks for</p>
-            <h2 className="mt-3 text-4xl font-black leading-none text-ink sm:text-5xl">
-              Not a chatbot. A reply machine.
-            </h2>
-          </div>
-          <div className="mt-9 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {situations.map((item) => (
-              <div key={item} className="border-2 border-ink bg-paper p-5 transition hover:-translate-y-1 hover:shadow-block">
-                <h3 className="text-xl font-black text-ink">{item}</h3>
-                <p className="mt-3 text-sm font-bold leading-6 text-gray-700">
-                  One click output from the same saved business context.
-                </p>
+      <section id="memory" className="border-b border-ink/10 bg-white">
+        <div className="mx-auto max-w-5xl px-4 py-16 sm:px-6">
+          <p className="text-sm font-black uppercase text-blue-700">What it holds</p>
+          <h2 className="mt-3 text-4xl font-black leading-none text-ink sm:text-5xl">
+            Three kinds of memory.
+            <br />
+            One complete picture.
+          </h2>
+
+          <div className="mt-10 grid gap-5 sm:grid-cols-3">
+            {memories.map((memory) => (
+              <div key={memory.label} className="border-2 border-ink bg-paper p-6 shadow-block">
+                <span
+                  className={`${memory.bg} inline-block border-2 border-ink px-3 py-1 text-xs font-black uppercase text-ink`}
+                >
+                  {memory.label}
+                </span>
+                <p className="mt-4 text-xl font-black leading-snug text-ink">{memory.line}</p>
               </div>
             ))}
           </div>
+        </div>
+      </section>
+
+      <section className="border-b border-ink/10 bg-paper">
+        <div className="mx-auto max-w-5xl px-4 py-16 sm:px-6">
+          <p className="text-sm font-black uppercase text-blue-700">The moment it pays off</p>
+          <h2 className="mt-3 text-4xl font-black leading-none text-ink sm:text-5xl">
+            You know exactly
+            <br />
+            where you stand.
+          </h2>
+
+          <div className="mt-10 border-2 border-ink bg-white shadow-blockLg">
+            <div className="border-b-2 border-ink p-5">
+              <p className="mb-2 text-xs font-black uppercase text-gray-500">Client message</p>
+              <p className="text-base font-black italic text-ink">
+                &ldquo;Can you add a dashboard page? I thought we talked about this.&rdquo;
+              </p>
+            </div>
+
+            <div className="border-b-2 border-ink bg-danger/5 p-5">
+              <p className="mb-3 text-xs font-black uppercase text-danger">Project memory</p>
+              <div className="flex items-center gap-3">
+                <span className="border-2 border-ink bg-danger px-2 py-1 text-xs font-black uppercase text-white">
+                  Excluded
+                </span>
+                <p className="text-base font-black text-ink">Dashboard pages</p>
+              </div>
+            </div>
+
+            <div className="bg-ink p-5">
+              <p className="mb-2 text-xs font-black uppercase text-proof">Your reply — 12 seconds later</p>
+              <p className="text-base font-black leading-7 text-white">
+                &ldquo;That&rsquo;s outside our current scope. Happy to quote it as a separate add-on.&rdquo;
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4 border-2 border-danger/40 bg-danger/5 p-5">
+            <p className="mb-1 text-xs font-black uppercase text-danger">Without memory</p>
+            <p className="text-base font-bold text-gray-700">
+              You dig through emails. You&rsquo;re not sure. You say yes. That&rsquo;s 30 hours you won&rsquo;t get paid for.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section className="bg-ink">
+        <div className="mx-auto max-w-3xl px-4 py-20 text-center sm:px-6">
+          <h2 className="text-4xl font-black leading-none text-white sm:text-5xl lg:text-6xl">
+            Your next client message
+            <br />
+            shouldn&rsquo;t cost you money.
+          </h2>
+          <p className="mt-5 text-lg font-bold text-gray-400">
+            Takes 5 minutes to set up. Works on every client conversation after that.
+          </p>
+          <Link
+            href="/workspace"
+            className="focus-block mt-10 inline-block rounded-md border-2 border-signal bg-signal px-10 py-4 text-xl font-black text-ink transition hover:-translate-y-0.5"
+            style={{ boxShadow: "5px 5px 0 rgba(255,255,255,0.15)" }}
+          >
+            Build my memory — it&rsquo;s free →
+          </Link>
+          <p className="mt-4 text-sm font-bold text-gray-600">No account. No credit card.</p>
         </div>
       </section>
     </main>
