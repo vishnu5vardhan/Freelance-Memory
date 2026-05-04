@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "Freelancer Memory",
+  "description": "Generate client replies from saved freelancer memory without leaving the browser.",
+  "version": "0.1.0",
+  "minimum_chrome_version": "114",
+  "permissions": ["activeTab", "clipboardWrite", "scripting", "sidePanel", "storage"],
+  "host_permissions": ["http://localhost/*", "http://127.0.0.1/*", "https://*.vercel.app/*"],
+  "action": {
+    "default_title": "Open Freelancer Memory"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src http://localhost:* http://127.0.0.1:* https://*.vercel.app"
+  }
+}

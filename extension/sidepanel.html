@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Freelancer Memory</title>
+    <link rel="stylesheet" href="sidepanel.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="hero">
+        <p class="eyebrow">Freelancer Memory</p>
+        <h1>Reply without tab hopping.</h1>
+        <div class="score">
+          <div>
+            <span>Memory</span>
+            <strong id="scoreText">0%</strong>
+          </div>
+          <div class="meter" aria-hidden="true">
+            <span id="scoreBar"></span>
+          </div>
+        </div>
+      </header>
+
+      <section class="panel">
+        <div class="panel-title">
+          <div>
+            <p class="eyebrow">Step 1</p>
+            <h2>Client message</h2>
+          </div>
+          <div class="button-row compact">
+            <button id="grabPageButton" class="button secondary" type="button">Use page</button>
+            <button id="grabSelectionButton" class="button secondary" type="button">Use highlight</button>
+          </div>
+        </div>
+        <label class="field">
+          <span>Selected text or pasted message</span>
+          <textarea
+            id="inputText"
+            rows="7"
+            placeholder="Highlight a client message on the page, then click Use highlight."
+          ></textarea>
+        </label>
+        <p id="pageHint" class="hint">Click the FM button near a reply box, or highlight the exact client message.</p>
+        <p id="sessionHint" class="hint"></p>
+        <p id="projectHint" class="hint"></p>
+      </section>
+
+      <section class="panel">
+        <div class="panel-title">
+          <div>
+            <p class="eyebrow">Step 2</p>
+            <h2>Reply setup</h2>
+          </div>
+        </div>
+        <div class="grid two">
+          <label class="field">
+            <span>Reply mode</span>
+            <select id="forcedIntent"></select>
+          </label>
+          <label class="field">
+            <span>API endpoint</span>
+            <input id="apiEndpoint" type="url" spellcheck="false" />
+          </label>
+        </div>
+        <label class="field">
+          <span>Beta key</span>
+          <input id="betaKey" type="password" spellcheck="false" placeholder="Shared beta password" />
+        </label>
+        <label class="field">
+          <span>Extra instruction</span>
+          <input id="userInstruction" type="text" placeholder="Shorter, firmer, warmer..." />
+        </label>
+        <button id="generateButton" class="button primary" type="button">Generate reply</button>
+        <p id="statusText" class="hint" role="status">Run the Next app locally, then generate.</p>
+      </section>
+
+      <section class="panel">
+        <div class="panel-title">
+          <div>
+            <p class="eyebrow">Step 3</p>
+            <h2>Reply</h2>
+          </div>
+          <div class="button-row compact">
+            <button id="insertButton" class="button secondary" type="button" disabled>Insert</button>
+            <button id="copyButton" class="button secondary" type="button" disabled>Copy</button>
+          </div>
+        </div>
+        <div class="badges">
+          <span id="intentBadge">waiting</span>
+          <span id="confidenceBadge">auto</span>
+        </div>
+        <div id="riskBox" class="risk-box" hidden>
+          <strong id="riskTitle">Risk</strong>
+          <p id="riskReason"></p>
+        </div>
+        <div id="analysisBox" class="analysis-box" hidden></div>
+        <textarea id="replyOutput" rows="8" readonly placeholder="Generated reply appears here."></textarea>
+        <p id="insertHint" class="hint">Generate first. Then review and insert.</p>
+        <div id="replyMeta" class="meta" hidden></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-title">
+          <div>
+            <p class="eyebrow">Step 4</p>
+            <h2>Memory review</h2>
+          </div>
+          <div class="button-row compact">
+            <button id="acceptAllMemoryButton" class="button secondary" type="button" disabled>Accept all</button>
+            <button id="rejectAllMemoryButton" class="button secondary" type="button" disabled>Reject all</button>
+          </div>
+        </div>
+        <p class="hint">Budget, timeline, payment terms, scope, and risks need your OK before saving.</p>
+        <div id="pendingReviewList" class="pending-list"></div>
+        <p id="memoryReviewEmpty" class="empty-state">No pending memory updates.</p>
+      </section>
+
+      <section class="panel">
+        <div class="panel-title">
+          <div>
+            <p class="eyebrow">Step 5</p>
+            <h2>Saved info</h2>
+          </div>
+          <div class="tabs" role="tablist" aria-label="Saved info">
+            <button id="memoryTab" class="tab active" type="button" role="tab" aria-selected="true">Memory</button>
+            <button id="projectTab" class="tab" type="button" role="tab" aria-selected="false">Project</button>
+            <button id="socialsTab" class="tab" type="button" role="tab" aria-selected="false">Socials</button>
+          </div>
+        </div>
+        <div id="memorySnapshot" class="memory-snapshot"></div>
+        <div id="memoryPanel" class="tab-panel">
+          <div id="memoryFields" class="memory-fields"></div>
+        </div>
+        <div id="projectPanel" class="tab-panel" hidden>
+          <div id="projectFields" class="memory-fields"></div>
+        </div>
+        <div id="socialsPanel" class="tab-panel" hidden>
+          <div id="socialFields" class="memory-fields"></div>
+        </div>
+        <p class="hint">Saved in Chrome storage on this browser.</p>
+      </section>
+    </main>
+    <script src="sidepanel.js"></script>
+  </body>
+</html>
