@@ -4,7 +4,7 @@ chrome.runtime.onInstalled.addListener(() => {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === "freelancer-memory:generate-reply") {
-    requestGenerationWithLocalFallback(message.endpoint, message.payload, message.betaKey, message.installId)
+    requestGeneration(message.endpoint, message.payload, message.betaKey, message.installId)
       .then((data) => sendResponse({ ok: true, data }))
       .catch((error) => sendResponse({ ok: false, error: readableError(error) }));
 
@@ -39,20 +39,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return true;
 });
 
-async function requestGenerationWithLocalFallback(endpoint, payload, betaKey, installId) {
-  try {
-    return await requestGeneration(endpoint, payload, betaKey, installId);
-  } catch (error) {
-    const fallbackEndpoint = getLocalFallbackEndpoint(endpoint);
-
-    if (!fallbackEndpoint) {
-      throw error;
-    }
-
-    return requestGeneration(fallbackEndpoint, payload, betaKey, installId);
-  }
-}
-
 async function requestGeneration(endpoint, payload, betaKey, installId) {
   const headers = {
     "Content-Type": "application/json"
@@ -80,23 +66,11 @@ async function requestGeneration(endpoint, payload, betaKey, installId) {
   return data;
 }
 
-function getLocalFallbackEndpoint(endpoint) {
-  if (endpoint === "http://localhost:3000/api/generate") {
-    return "http://localhost:3001/api/generate";
-  }
-
-  if (endpoint === "http://127.0.0.1:3000/api/generate") {
-    return "http://127.0.0.1:3001/api/generate";
-  }
-
-  return "";
-}
-
 function readableError(error) {
   const message = error instanceof Error ? error.message : "Something went wrong.";
 
   if (message.includes("Failed to fetch")) {
-    return "Could not reach API from extension background. Start Next locally and check the endpoint.";
+    return "Could not reach the Freelancer Memory API. Check the endpoint and try again.";
   }
 
   return message;

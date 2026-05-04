@@ -691,7 +691,7 @@ async function generateReply() {
       forcedIntent: elements.forcedIntent.value,
       userInstruction: elements.userInstruction.value
     };
-    const data = await requestGenerationWithLocalFallback(endpoints.generate, payload);
+    const data = await requestGenerateReply(endpoints.generate, payload);
 
     setResult(data.result, data.usage);
     renderRisk(buildCombinedRiskDisplay(data.result, analysisState.scopeRisk));
@@ -747,20 +747,7 @@ async function runAnalysisStep(endpoints, contextPacket) {
     const data = await requestAnalyzeClient(endpoints.analyzeClient, contextPacket);
     state.clientAnalysis = data.result;
   } catch (error) {
-    const fallbackBase = getLocalFallbackApiBase(endpoints.base);
-
-    if (fallbackBase) {
-      try {
-        const fallbackEndpoints = getApiEndpoints(fallbackBase);
-        const data = await requestAnalyzeClient(fallbackEndpoints.analyzeClient, contextPacket);
-        state.clientAnalysis = data.result;
-        state.apiBase = fallbackBase;
-      } catch (fallbackError) {
-        state.warnings.push(`Client analysis skipped: ${readableError(fallbackError)}`);
-      }
-    } else {
-      state.warnings.push(`Client analysis skipped: ${readableError(error)}`);
-    }
+    state.warnings.push(`Client analysis skipped: ${readableError(error)}`);
   }
 
   const scopeEndpoints = getApiEndpoints(state.apiBase);
@@ -783,24 +770,6 @@ async function runAnalysisStep(endpoints, contextPacket) {
   state.projectMemory = state.memoryResult.projectMemory;
 
   return state;
-}
-
-async function requestGenerationWithLocalFallback(endpoint, payload) {
-  try {
-    return await requestGenerateReply(endpoint, payload);
-  } catch (error) {
-    const fallbackEndpoint = getLocalFallbackEndpoint(endpoint);
-
-    if (!fallbackEndpoint) {
-      throw error;
-    }
-
-    setStatus("Port 3000 failed. Trying 3001...", false);
-    const data = await requestGenerateReply(fallbackEndpoint, payload);
-    elements.apiEndpoint.value = fallbackEndpoint;
-    await setStoredValue(storageKeys.endpoint, fallbackEndpoint);
-    return data;
-  }
 }
 
 async function requestAnalyzeClient(endpoint, contextPacket) {
@@ -2489,42 +2458,6 @@ function buildApiEndpoint(base, route) {
   return `${base.replace(/\/+$/, "")}/api/${route}`;
 }
 
-function getLocalFallbackEndpoint(endpoint) {
-  const fallbackBase = getLocalFallbackApiBase(normalizeApiBase(endpoint));
-
-  if (!fallbackBase) {
-    return "";
-  }
-
-  return buildApiEndpoint(fallbackBase, getApiRouteName(endpoint));
-}
-
-function getLocalFallbackApiBase(apiBase) {
-  try {
-    const url = new URL(apiBase);
-
-    if ((url.hostname === "localhost" || url.hostname === "127.0.0.1") && url.port === "3000") {
-      url.port = "3001";
-      return `${url.origin}${url.pathname.replace(/\/+$/, "")}`;
-    }
-  } catch {
-    return "";
-  }
-
-  return "";
-}
-
-function getApiRouteName(endpoint) {
-  try {
-    const url = new URL(endpoint);
-    const match = url.pathname.match(/\/api\/([^/]+)\/?$/);
-
-    return match?.[1] || "generate";
-  } catch {
-    return "generate";
-  }
-}
-
 function readableError(error) {
   const message = error instanceof Error ? error.message : "Something went wrong.";
 
@@ -2537,7 +2470,7 @@ function readableError(error) {
   }
 
   if (message.includes("Failed to fetch")) {
-    return "Could not reach API. Start Next locally or check the endpoint.";
+    return "Could not reach the Freelancer Memory API. Check the endpoint and try again.";
   }
 
   return message;

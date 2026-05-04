@@ -5,9 +5,21 @@
   "version": "0.1.0",
   "minimum_chrome_version": "114",
   "permissions": ["activeTab", "clipboardWrite", "scripting", "sidePanel", "storage"],
-  "host_permissions": ["http://localhost/*", "http://127.0.0.1/*", "https://*.vercel.app/*"],
+  "host_permissions": ["https://freelancer-memory.vercel.app/*"],
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
   "action": {
-    "default_title": "Open Freelancer Memory"
+    "default_title": "Open Freelancer Memory",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
   },
   "background": {
     "service_worker": "background.js"
@@ -23,6 +35,6 @@
     }
   ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'; connect-src http://localhost:* http://127.0.0.1:* https://*.vercel.app"
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src https://freelancer-memory.vercel.app"
   }
 }

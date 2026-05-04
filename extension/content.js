@@ -1456,7 +1456,7 @@ function readableInlineError(error) {
   const message = error instanceof Error ? error.message : "Something went wrong.";
 
   if (message.includes("Failed to fetch")) {
-    return "Could not reach API. Start Next locally or open the panel to check endpoint.";
+    return "Could not reach the Freelancer Memory API. Open the panel to check the endpoint.";
   }
 
   return message;
