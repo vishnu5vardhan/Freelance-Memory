@@ -54,7 +54,13 @@ After code changes, click `Reload` on the extension card in `chrome://extensions
 
 ## Endpoint
 
-Local default:
+Production default:
+
+```txt
+https://freelancer-memory.vercel.app/api/generate
+```
+
+Local development:
 
 ```txt
 http://localhost:3000/api/generate

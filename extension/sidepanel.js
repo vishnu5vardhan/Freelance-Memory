@@ -16,7 +16,7 @@ const storageKeys = {
   projects: "freelancer_memory_projects"
 };
 
-const defaultApiEndpoint = "http://localhost:3000/api/generate";
+const defaultApiEndpoint = "https://freelancer-memory.vercel.app/api/generate";
 const sessionTtlMs = 2 * 60 * 60 * 1000;
 
 const emptyContext = {
