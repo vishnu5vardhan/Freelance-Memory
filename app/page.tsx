@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { getChromeWebStoreUrlWithUtm } from "@/lib/chrome-store";
 
 const memories = [
   {
@@ -19,6 +20,8 @@ const memories = [
 ];
 
 export default function HomePage() {
+  const chromeStoreUrl = getChromeWebStoreUrlWithUtm("landing");
+
   return (
     <main>
       <section className="relative border-b border-ink/10 bg-paper">
@@ -37,23 +40,40 @@ export default function HomePage() {
           </h1>
 
           <p className="mt-6 max-w-xl text-xl font-bold leading-8 text-gray-700">
-            Keep your rates, clients, projects, and scope in one place — so every client conversation starts from the truth.
+            Save your freelance memory once. Use it inside Gmail, LinkedIn, Upwork, and more.
           </p>
 
           <div className="mt-10 flex flex-col gap-3 sm:flex-row">
-            <Link
-              href="/workspace"
-              className="focus-block rounded-md border-2 border-ink bg-ink px-8 py-4 text-center text-lg font-black text-white shadow-[5px_5px_0_#f5d547] transition hover:-translate-y-0.5 hover:bg-gray-900"
-            >
-              Build my memory →
-            </Link>
+            {chromeStoreUrl ? (
+              <a
+                href={chromeStoreUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="focus-block rounded-md border-2 border-ink bg-ink px-8 py-4 text-center text-lg font-black text-white shadow-[5px_5px_0_#f5d547] transition hover:-translate-y-0.5 hover:bg-gray-900"
+              >
+                Add to Chrome
+              </a>
+            ) : (
+              <span className="rounded-md border-2 border-ink bg-gray-200 px-8 py-4 text-center text-lg font-black text-gray-500 shadow-[5px_5px_0_#f5d547]">
+                Add to Chrome
+              </span>
+            )}
             <a
               href="#memory"
               className="focus-block rounded-md border-2 border-ink bg-white px-8 py-4 text-center text-lg font-black text-ink transition hover:-translate-y-0.5 hover:bg-signal"
             >
-              See what it holds
+              See how it works
             </a>
           </div>
+          {!chromeStoreUrl ? (
+            <p className="mt-4 text-sm font-bold text-gray-600">
+              Chrome Web Store link is not configured yet.{" "}
+              <Link href="/workspace" className="font-black text-ink underline decoration-2 underline-offset-4">
+                Try the web demo
+              </Link>
+              .
+            </p>
+          ) : null}
         </div>
       </section>
 
@@ -135,14 +155,29 @@ export default function HomePage() {
           <p className="mt-5 text-lg font-bold text-gray-400">
             Takes 5 minutes to set up. Works on every client conversation after that.
           </p>
-          <Link
-            href="/workspace"
-            className="focus-block mt-10 inline-block rounded-md border-2 border-signal bg-signal px-10 py-4 text-xl font-black text-ink transition hover:-translate-y-0.5"
-            style={{ boxShadow: "5px 5px 0 rgba(255,255,255,0.15)" }}
-          >
-            Build my memory — it&rsquo;s free →
-          </Link>
-          <p className="mt-4 text-sm font-bold text-gray-600">No account. No credit card.</p>
+          {chromeStoreUrl ? (
+            <a
+              href={chromeStoreUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="focus-block mt-10 inline-block rounded-md border-2 border-signal bg-signal px-10 py-4 text-xl font-black text-ink transition hover:-translate-y-0.5"
+              style={{ boxShadow: "5px 5px 0 rgba(255,255,255,0.15)" }}
+            >
+              Add to Chrome
+            </a>
+          ) : (
+            <span
+              className="mt-10 inline-block rounded-md border-2 border-signal bg-gray-300 px-10 py-4 text-xl font-black text-gray-600"
+              style={{ boxShadow: "5px 5px 0 rgba(255,255,255,0.15)" }}
+            >
+              Add to Chrome
+            </span>
+          )}
+          {!chromeStoreUrl ? (
+            <p className="mt-4 text-sm font-bold text-gray-500">Chrome Web Store link is not configured yet.</p>
+          ) : (
+            <p className="mt-4 text-sm font-bold text-gray-500">No account needed. Your memory stays local in Chrome.</p>
+          )}
         </div>
       </section>
     </main>

@@ -1,19 +1,13 @@
 import { NextResponse } from "next/server";
-import { requireBetaAccess } from "@/lib/api-auth";
 import { generatedResultSchema, generateRequestSchema, type Usage } from "@/lib/memory";
 import { applyRiskSafeguards } from "@/lib/memory-risk";
 import { buildPrompt, compactContext, generationSchema, getRequestSource } from "@/lib/prompt";
-import { logGenerationEvent } from "@/lib/supabase-logging";
+import { checkDailyRateLimit, getByoOpenAIKey, getInstallId } from "@/lib/rate-limit";
+import { logGenerationEvent, logGenerationFailure } from "@/lib/supabase-logging";
 
 const openaiUrl = "https://api.openai.com/v1/responses";
 
 export async function POST(request: Request) {
-  const authError = requireBetaAccess(request);
-
-  if (authError) {
-    return authError;
-  }
-
   const json = await request.json().catch(() => null);
   const parsed = generateRequestSchema.safeParse(json);
 
@@ -21,7 +15,25 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });
   }
 
-  const apiKey = process.env.OPENAI_API_KEY;
+  const byoKey = getByoOpenAIKey(request);
+
+  if (!byoKey) {
+    const rate = await checkDailyRateLimit(getInstallId(request));
+
+    if (!rate.allowed) {
+      return NextResponse.json(
+        {
+          error: `Daily free limit reached (${rate.limit}/day). Add your OpenAI key in Advanced for unlimited.`,
+          code: "rate_limited",
+          used: rate.used,
+          limit: rate.limit
+        },
+        { status: 429 }
+      );
+    }
+  }
+
+  const apiKey = byoKey ?? process.env.OPENAI_API_KEY;
 
   if (!apiKey) {
     return NextResponse.json(
@@ -34,6 +46,7 @@ export async function POST(request: Request) {
 
   const compacted = compactContext(parsed.data.context, parsed.data.inputText, parsed.data.forcedIntent, getRequestSource(parsed.data));
   const prompt = buildPrompt(parsed.data);
+  const startedAt = Date.now();
   const response = await fetch(openaiUrl, {
     method: "POST",
     headers: {
@@ -57,6 +70,10 @@ export async function POST(request: Request) {
 
   if (!response.ok) {
     const detail = await response.text();
+    await logGenerationFailure(request, parsed.data, {
+      durationMs: Date.now() - startedAt,
+      errorCategory: "openai_request_failed"
+    });
     return NextResponse.json(
       {
         error: "OpenAI request failed.",
@@ -70,6 +87,10 @@ export async function POST(request: Request) {
   const rawText = extractOutputText(data);
 
   if (!rawText) {
+    await logGenerationFailure(request, parsed.data, {
+      durationMs: Date.now() - startedAt,
+      errorCategory: "empty_openai_output"
+    });
     return NextResponse.json(
       {
         error: "OpenAI returned no text output."
@@ -82,6 +103,10 @@ export async function POST(request: Request) {
     const parsedResult = generatedResultSchema.safeParse(JSON.parse(rawText));
 
     if (!parsedResult.success) {
+      await logGenerationFailure(request, parsed.data, {
+        durationMs: Date.now() - startedAt,
+        errorCategory: "unexpected_openai_shape"
+      });
       return NextResponse.json(
         {
           error: "OpenAI returned unexpected shape.",
@@ -93,13 +118,21 @@ export async function POST(request: Request) {
 
     const result = applyRiskSafeguards(parsedResult.data, parsed.data);
     const usage = extractUsage(data, prompt.length, compacted.fields);
-    await logGenerationEvent(request, parsed.data, result, usage);
+    await logGenerationEvent(request, parsed.data, result, usage, {
+      durationMs: Date.now() - startedAt,
+      outputChars: result.reply?.length ?? 0,
+      status: "ok"
+    });
 
     return NextResponse.json({
       result,
       usage
     });
   } catch {
+    await logGenerationFailure(request, parsed.data, {
+      durationMs: Date.now() - startedAt,
+      errorCategory: "invalid_openai_json"
+    });
     return NextResponse.json(
       {
         error: "OpenAI returned invalid JSON.",

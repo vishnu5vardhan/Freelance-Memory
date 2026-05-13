@@ -1,13 +1,15 @@
 const storageKeys = {
   context: "freelancer_memory_extension_context",
-  betaKey: "freelancer_memory_extension_beta_key",
   draft: "freelancer_memory_extension_draft",
+  diagnostics: "freelancer_memory_extension_diagnostics",
   endpoint: "freelancer_memory_extension_api_endpoint",
   forcedIntent: "freelancer_memory_extension_forced_intent",
   installId: "freelancer_memory_extension_install_id",
   instruction: "freelancer_memory_extension_instruction",
   lastResult: "freelancer_memory_extension_last_result",
   lastSelection: "freelancer_memory_extension_last_selection",
+  onboardingCompleted: "freelancer_memory_extension_onboarding_completed",
+  openaiKey: "freelancer_memory_extension_openai_key",
   pageContext: "freelancer_memory_extension_page_context",
   pendingUpdates: "freelancer_memory_pending_updates",
   socials: "freelancer_memory_extension_socials",
@@ -18,6 +20,9 @@ const storageKeys = {
 
 const defaultApiEndpoint = "https://freelancer-memory.vercel.app/api/generate";
 const sessionTtlMs = 2 * 60 * 60 * 1000;
+const slowGenerationMs = 6000;
+const diagnosticsLimit = 50;
+const weakMemoryThreshold = 40;
 
 const emptyContext = {
   name: "",
@@ -69,6 +74,15 @@ const socialFields = [
   ["calendar", "Calendar", "https://cal.com/yourname"]
 ];
 
+const clientFields = [
+  ["name", "Client name", "Sarah Chen", 1, "text"],
+  ["company", "Company", "GlowSkin", 1, "text"],
+  ["emailOrHandle", "Email / handle", "sarah@example.com or @sarah", 1, "text"],
+  ["source", "Source", "", 1, "source"],
+  ["status", "Status", "", 1, "clientStatus"],
+  ["notes", "Notes", "One note per line", 4, "list"]
+];
+
 const projectFields = [
   ["title", "Project title", "Landing page redesign", 1, "text"],
   ["status", "Status", "", 1, "status"],
@@ -82,8 +96,11 @@ const projectFields = [
   ["nextStep", "Next step", "Send fixed scope for approval", 2, "text"]
 ];
 
+const sourceOptions = ["generic", "gmail", "linkedin", "upwork", "fiverr", "whatsapp", "x"];
+const clientStatuses = ["lead", "quoted", "active", "waiting", "done"];
 const projectStatuses = ["discovery", "quoted", "active", "waiting", "done"];
 const listProjectFields = ["includedScope", "excludedScope", "agreedFacts", "risks"];
+const coreContextFieldKeys = ["role", "services", "pricing", "proof", "paymentTerms", "boundaries", "voice"];
 const outputTypes = [
   ["auto", "Auto"],
   ["first_reply", "First reply"],
@@ -116,6 +133,10 @@ let currentClientMemory = null;
 let currentProjectMemory = null;
 let pendingMemoryUpdates = [];
 let installId = "";
+let pendingResetAction = "";
+let activeTesterTab = "clients";
+let activeTopTab = "reply";
+let isGenerating = false;
 
 document.addEventListener("DOMContentLoaded", init);
 
@@ -123,12 +144,15 @@ async function init() {
   cacheElements();
   renderModeOptions();
   renderMemoryFields();
+  renderClientFields();
   renderSocialFields();
   renderProjectFields();
   bindEvents();
+  showTopTab("reply");
   await cleanExpiredSessions();
   await loadState();
   await loadStoredPageContext();
+  trackEvent("extension_opened", { source: currentPageContext?.source || "" });
 
   if (!currentPageContext?.latestClientMessage) {
     await grabSelection();
@@ -136,8 +160,14 @@ async function init() {
 }
 
 function cacheElements() {
+  elements.replyTopTab = document.querySelector("#replyTopTab");
+  elements.memoryTopTab = document.querySelector("#memoryTopTab");
+  elements.advancedTopTab = document.querySelector("#advancedTopTab");
+  elements.replyTabPanel = document.querySelector("#replyTabPanel");
+  elements.memoryTabPanel = document.querySelector("#memoryTabPanel");
+  elements.advancedTabPanel = document.querySelector("#advancedTabPanel");
   elements.inputText = document.querySelector("#inputText");
-  elements.betaKey = document.querySelector("#betaKey");
+  elements.openaiKey = document.querySelector("#openaiKey");
   elements.forcedIntent = document.querySelector("#forcedIntent");
   elements.apiEndpoint = document.querySelector("#apiEndpoint");
   elements.userInstruction = document.querySelector("#userInstruction");
@@ -145,9 +175,12 @@ function cacheElements() {
   elements.copyButton = document.querySelector("#copyButton");
   elements.insertButton = document.querySelector("#insertButton");
   elements.insertHint = document.querySelector("#insertHint");
+  elements.onboardingNotice = document.querySelector("#onboardingNotice");
+  elements.openOnboardingButton = document.querySelector("#openOnboardingButton");
   elements.grabPageButton = document.querySelector("#grabPageButton");
   elements.grabSelectionButton = document.querySelector("#grabSelectionButton");
   elements.replyOutput = document.querySelector("#replyOutput");
+  elements.replyEmpty = document.querySelector("#replyEmpty");
   elements.replyMeta = document.querySelector("#replyMeta");
   elements.statusText = document.querySelector("#statusText");
   elements.pageHint = document.querySelector("#pageHint");
@@ -155,13 +188,23 @@ function cacheElements() {
   elements.projectHint = document.querySelector("#projectHint");
   elements.memoryFields = document.querySelector("#memoryFields");
   elements.socialFields = document.querySelector("#socialFields");
+  elements.clientFields = document.querySelector("#clientFields");
   elements.projectFields = document.querySelector("#projectFields");
+  elements.activeClientSelect = document.querySelector("#activeClientSelect");
+  elements.activeProjectSelect = document.querySelector("#activeProjectSelect");
+  elements.clientTab = document.querySelector("#clientTab");
   elements.memoryTab = document.querySelector("#memoryTab");
   elements.projectTab = document.querySelector("#projectTab");
   elements.socialsTab = document.querySelector("#socialsTab");
+  elements.clientPanel = document.querySelector("#clientPanel");
   elements.memoryPanel = document.querySelector("#memoryPanel");
   elements.projectPanel = document.querySelector("#projectPanel");
   elements.socialsPanel = document.querySelector("#socialsPanel");
+  elements.businessDetails = document.querySelector("#businessDetails");
+  elements.clientDetails = document.querySelector("#clientDetails");
+  elements.projectDetails = document.querySelector("#projectDetails");
+  elements.socialsDetails = document.querySelector("#socialsDetails");
+  elements.importDetails = document.querySelector("#importDetails");
   elements.scoreText = document.querySelector("#scoreText");
   elements.scoreBar = document.querySelector("#scoreBar");
   elements.intentBadge = document.querySelector("#intentBadge");
@@ -175,6 +218,41 @@ function cacheElements() {
   elements.acceptAllMemoryButton = document.querySelector("#acceptAllMemoryButton");
   elements.rejectAllMemoryButton = document.querySelector("#rejectAllMemoryButton");
   elements.memorySnapshot = document.querySelector("#memorySnapshot");
+  elements.resetClientMemoryButton = document.querySelector("#resetClientMemoryButton");
+  elements.resetProjectMemoryButton = document.querySelector("#resetProjectMemoryButton");
+  elements.resetAllContextButton = document.querySelector("#resetAllContextButton");
+  elements.clientsTab = document.querySelector("#clientsTab");
+  elements.projectsTab = document.querySelector("#projectsTab");
+  elements.sessionTab = document.querySelector("#sessionTab");
+  elements.importTab = document.querySelector("#importTab");
+  elements.clientsPanel = document.querySelector("#clientsPanel");
+  elements.projectsPanel = document.querySelector("#projectsPanel");
+  elements.sessionPanel = document.querySelector("#sessionPanel");
+  elements.importPanel = document.querySelector("#importPanel");
+  elements.clientsList = document.querySelector("#clientsList");
+  elements.projectsList = document.querySelector("#projectsList");
+  elements.sessionDetails = document.querySelector("#sessionDetails");
+  elements.clientsEmpty = document.querySelector("#clientsEmpty");
+  elements.projectsEmpty = document.querySelector("#projectsEmpty");
+  elements.sessionEmpty = document.querySelector("#sessionEmpty");
+  elements.refreshSessionButton = document.querySelector("#refreshSessionButton");
+  elements.clearSessionButton = document.querySelector("#clearSessionButton");
+  elements.expireSessionButton = document.querySelector("#expireSessionButton");
+  elements.importTarget = document.querySelector("#importTarget");
+  elements.importSource = document.querySelector("#importSource");
+  elements.importClientName = document.querySelector("#importClientName");
+  elements.importCompany = document.querySelector("#importCompany");
+  elements.importEmailHandle = document.querySelector("#importEmailHandle");
+  elements.importProjectTitle = document.querySelector("#importProjectTitle");
+  elements.importFile = document.querySelector("#importFile");
+  elements.importText = document.querySelector("#importText");
+  elements.runImportButton = document.querySelector("#runImportButton");
+  elements.importStatus = document.querySelector("#importStatus");
+  elements.diagnosticsList = document.querySelector("#diagnosticsList");
+  elements.diagnosticsEmpty = document.querySelector("#diagnosticsEmpty");
+  elements.diagnosticsDetails = document.querySelector("#diagnosticsDetails");
+  elements.copyDiagnosticsButton = document.querySelector("#copyDiagnosticsButton");
+  elements.clearDiagnosticsButton = document.querySelector("#clearDiagnosticsButton");
 }
 
 function renderModeOptions() {
@@ -189,23 +267,75 @@ function renderModeOptions() {
 }
 
 function renderMemoryFields() {
-  elements.memoryFields.replaceChildren(
-    ...contextFields.map(([key, label, placeholder, rows]) => {
+  const coreFields = contextFields.filter(([key]) => coreContextFieldKeys.includes(key));
+  const optionalFields = contextFields.filter(([key]) => !coreContextFieldKeys.includes(key));
+  const optionalDetails = document.createElement("details");
+  optionalDetails.className = "memory-advanced";
+  const summary = document.createElement("summary");
+  summary.innerHTML = "<strong>Optional profile details</strong><span>Name, niche, bio, links, process, and availability.</span>";
+  const optionalGrid = document.createElement("div");
+  optionalGrid.className = "memory-fields";
+  optionalGrid.append(...optionalFields.map(createMemoryField));
+  optionalDetails.append(summary, optionalGrid);
+
+  elements.memoryFields.replaceChildren(...coreFields.map(createMemoryField), optionalDetails);
+}
+
+function createMemoryField([key, label, placeholder, rows]) {
+  const wrapper = document.createElement("label");
+  wrapper.className = "field";
+
+  const labelNode = document.createElement("span");
+  labelNode.textContent = label;
+
+  const control = rows === 1 ? document.createElement("input") : document.createElement("textarea");
+  control.id = `memory-${key}`;
+  control.dataset.memoryKey = key;
+  control.placeholder = placeholder;
+  control.spellcheck = true;
+
+  if (rows !== 1) {
+    control.rows = rows;
+  }
+
+  wrapper.append(labelNode, control);
+  return wrapper;
+}
+
+function renderClientFields() {
+  elements.clientFields.replaceChildren(
+    ...clientFields.map(([key, label, placeholder, rows, kind]) => {
       const wrapper = document.createElement("label");
       wrapper.className = "field";
 
       const labelNode = document.createElement("span");
       labelNode.textContent = label;
 
-      const control = rows === 1 ? document.createElement("input") : document.createElement("textarea");
-      control.id = `memory-${key}`;
-      control.dataset.memoryKey = key;
-      control.placeholder = placeholder;
-      control.spellcheck = true;
+      let control;
 
-      if (rows !== 1) {
-        control.rows = rows;
+      if (kind === "source" || kind === "clientStatus") {
+        control = document.createElement("select");
+        const options = kind === "source" ? sourceOptions : clientStatuses;
+
+        for (const optionValue of options) {
+          const option = document.createElement("option");
+          option.value = optionValue;
+          option.textContent = optionValue.replaceAll("_", " ");
+          control.append(option);
+        }
+      } else {
+        control = rows === 1 ? document.createElement("input") : document.createElement("textarea");
+        control.placeholder = placeholder;
+        control.spellcheck = true;
+
+        if (rows !== 1) {
+          control.rows = rows;
+        }
       }
+
+      control.id = `client-${key}`;
+      control.dataset.clientKey = key;
+      control.dataset.clientKind = kind;
 
       wrapper.append(labelNode, control);
       return wrapper;
@@ -275,8 +405,13 @@ function renderProjectFields() {
 }
 
 function bindEvents() {
+  elements.replyTopTab.addEventListener("click", () => showTopTab("reply"));
+  elements.memoryTopTab.addEventListener("click", () => showTopTab("memory"));
+  elements.advancedTopTab.addEventListener("click", () => showTopTab("advanced"));
+
   elements.inputText.addEventListener("input", () => {
     setStoredValue(storageKeys.draft, elements.inputText.value);
+    updateInputEmptyState();
   });
 
   elements.forcedIntent.addEventListener("change", () => {
@@ -287,8 +422,8 @@ function bindEvents() {
     setStoredValue(storageKeys.endpoint, elements.apiEndpoint.value);
   });
 
-  elements.betaKey.addEventListener("input", () => {
-    setStoredValue(storageKeys.betaKey, elements.betaKey.value);
+  elements.openaiKey?.addEventListener("input", () => {
+    setStoredValue(storageKeys.openaiKey, elements.openaiKey.value.trim());
   });
 
   elements.userInstruction.addEventListener("input", () => {
@@ -298,14 +433,39 @@ function bindEvents() {
   elements.generateButton.addEventListener("click", generateReply);
   elements.copyButton.addEventListener("click", copyReply);
   elements.insertButton.addEventListener("click", insertReplyIntoPage);
+  elements.openOnboardingButton.addEventListener("click", openOnboardingPage);
   elements.grabPageButton.addEventListener("click", grabPageContext);
   elements.grabSelectionButton.addEventListener("click", grabSelection);
+  elements.activeClientSelect.addEventListener("change", handleActiveClientSelectChange);
+  elements.activeProjectSelect.addEventListener("change", handleActiveProjectSelectChange);
+  elements.clientTab.addEventListener("click", () => showSavedInfoTab("client"));
   elements.memoryTab.addEventListener("click", () => showSavedInfoTab("memory"));
   elements.projectTab.addEventListener("click", () => showSavedInfoTab("project"));
   elements.socialsTab.addEventListener("click", () => showSavedInfoTab("socials"));
   elements.pendingReviewList.addEventListener("click", handlePendingReviewClick);
   elements.acceptAllMemoryButton.addEventListener("click", acceptAllPendingMemoryUpdates);
   elements.rejectAllMemoryButton.addEventListener("click", rejectAllPendingMemoryUpdates);
+  elements.resetClientMemoryButton.addEventListener("click", resetClientMemory);
+  elements.resetProjectMemoryButton.addEventListener("click", resetProjectMemory);
+  elements.resetAllContextButton.addEventListener("click", resetAllContextMemory);
+  elements.clientsTab.addEventListener("click", () => showTesterTab("clients"));
+  elements.projectsTab.addEventListener("click", () => showTesterTab("projects"));
+  elements.sessionTab.addEventListener("click", () => showTesterTab("session"));
+  elements.importTab.addEventListener("click", () => showTesterTab("import"));
+  elements.clientsList.addEventListener("click", handleClientsListClick);
+  elements.projectsList.addEventListener("click", handleProjectsListClick);
+  elements.refreshSessionButton.addEventListener("click", refreshSessionTester);
+  elements.clearSessionButton.addEventListener("click", clearActiveSession);
+  elements.expireSessionButton.addEventListener("click", expireActiveSession);
+  elements.importFile.addEventListener("change", handleImportFileChange);
+  elements.runImportButton.addEventListener("click", importExistingContext);
+  elements.copyDiagnosticsButton?.addEventListener("click", copyDiagnostics);
+  elements.clearDiagnosticsButton?.addEventListener("click", clearDiagnostics);
+  elements.diagnosticsDetails?.addEventListener("toggle", () => {
+    if (elements.diagnosticsDetails.open) {
+      renderDiagnostics();
+    }
+  });
 
   elements.memoryFields.addEventListener("input", (event) => {
     const key = event.target.dataset.memoryKey;
@@ -318,6 +478,7 @@ function bindEvents() {
     chrome.storage.local.set({ [storageKeys.context]: context });
     updateScore();
     setStatus("Memory saved.", false);
+    trackEvent("memory_saved", { field: key });
   });
 
   elements.socialFields.addEventListener("input", (event) => {
@@ -332,30 +493,102 @@ function bindEvents() {
     setStatus("Socials saved.", false);
   });
 
+  elements.clientFields.addEventListener("input", handleClientFieldChange);
+  elements.clientFields.addEventListener("change", handleClientFieldChange);
   elements.projectFields.addEventListener("input", handleProjectFieldChange);
   elements.projectFields.addEventListener("change", handleProjectFieldChange);
 
   chrome.storage.onChanged.addListener(handleStorageChange);
 }
 
+function showTopTab(tab) {
+  activeTopTab = tab;
+  const sections = {
+    reply: [elements.replyTopTab, elements.replyTabPanel],
+    memory: [elements.memoryTopTab, elements.memoryTabPanel],
+    advanced: [elements.advancedTopTab, elements.advancedTabPanel]
+  };
+
+  for (const [section, [button, panel]] of Object.entries(sections)) {
+    const isActive = section === tab;
+    button.classList.toggle("active", isActive);
+    button.setAttribute("aria-selected", String(isActive));
+    panel.hidden = !isActive;
+    panel.classList.toggle("active", isActive);
+  }
+}
+
+function renderOnboardingNotice(isCompleted) {
+  if (!elements.onboardingNotice) {
+    return;
+  }
+
+  elements.onboardingNotice.hidden = Boolean(isCompleted);
+}
+
+async function showTesterTab(tab) {
+  activeTesterTab = tab;
+  const isClients = tab === "clients";
+  const isProjects = tab === "projects";
+  const isSession = tab === "session";
+  const isImport = tab === "import";
+
+  elements.clientsPanel.hidden = !isClients;
+  elements.projectsPanel.hidden = !isProjects;
+  elements.sessionPanel.hidden = !isSession;
+  elements.clientsTab.classList.toggle("active", isClients);
+  elements.projectsTab.classList.toggle("active", isProjects);
+  elements.sessionTab.classList.toggle("active", isSession);
+  elements.importTab.classList.toggle("active", isImport);
+  elements.clientsTab.setAttribute("aria-selected", String(isClients));
+  elements.projectsTab.setAttribute("aria-selected", String(isProjects));
+  elements.sessionTab.setAttribute("aria-selected", String(isSession));
+  elements.importTab.setAttribute("aria-selected", String(isImport));
+
+  if (isImport && elements.importDetails) {
+    showTopTab("advanced");
+    elements.importDetails.open = true;
+    elements.importPanel.hidden = false;
+  }
+
+  await renderTesterViews();
+}
+
 function showSavedInfoTab(tab) {
+  const clientActive = tab === "client";
   const memoryActive = tab === "memory";
   const projectActive = tab === "project";
   const socialsActive = tab === "socials";
 
-  elements.memoryPanel.hidden = !memoryActive;
-  elements.projectPanel.hidden = !projectActive;
-  elements.socialsPanel.hidden = !socialsActive;
+  elements.clientTab.classList.toggle("active", clientActive);
   elements.memoryTab.classList.toggle("active", memoryActive);
   elements.projectTab.classList.toggle("active", projectActive);
   elements.socialsTab.classList.toggle("active", socialsActive);
+  elements.clientTab.setAttribute("aria-selected", String(clientActive));
   elements.memoryTab.setAttribute("aria-selected", String(memoryActive));
   elements.projectTab.setAttribute("aria-selected", String(projectActive));
   elements.socialsTab.setAttribute("aria-selected", String(socialsActive));
+
+  if (elements.businessDetails) elements.businessDetails.open = memoryActive;
+  if (elements.clientDetails) elements.clientDetails.open = clientActive;
+  if (elements.projectDetails) elements.projectDetails.open = projectActive;
+  if (elements.socialsDetails) elements.socialsDetails.open = socialsActive;
 }
 
 async function handleStorageChange(changes, areaName) {
-  if (areaName !== "local" || !changes[storageKeys.pageContext]?.newValue) {
+  if (areaName !== "local") {
+    return;
+  }
+
+  if (changes[storageKeys.clients] || changes[storageKeys.projects] || changes[storageKeys.sessions]) {
+    await renderTesterViews();
+  }
+
+  if (changes[storageKeys.onboardingCompleted]) {
+    renderOnboardingNotice(Boolean(changes[storageKeys.onboardingCompleted].newValue));
+  }
+
+  if (!changes[storageKeys.pageContext]?.newValue) {
     return;
   }
 
@@ -400,8 +633,12 @@ async function loadState() {
   elements.inputText.value = stored[storageKeys.draft] || "";
   elements.forcedIntent.value = stored[storageKeys.forcedIntent] || "auto";
   elements.apiEndpoint.value = stored[storageKeys.endpoint] || defaultApiEndpoint;
-  elements.betaKey.value = stored[storageKeys.betaKey] || "";
+  if (elements.openaiKey) {
+    elements.openaiKey.value = stored[storageKeys.openaiKey] || "";
+  }
   elements.userInstruction.value = stored[storageKeys.instruction] || "";
+  updateInputEmptyState();
+  renderOnboardingNotice(Boolean(stored[storageKeys.onboardingCompleted]));
 
   if (stored[storageKeys.lastResult]) {
     setResult(stored[storageKeys.lastResult]);
@@ -409,7 +646,26 @@ async function loadState() {
 
   renderPendingMemoryUpdates();
   renderMemorySnapshot();
+  await renderTesterViews();
   updateScore();
+  applyWeakMemoryHint();
+}
+
+function applyWeakMemoryHint() {
+  if (!elements.statusText) {
+    return;
+  }
+
+  const percent = getMemoryScorePercent();
+
+  if (percent < weakMemoryThreshold && !elements.statusText.classList.contains("error")) {
+    elements.statusText.textContent = "Replies improve when you add services, pricing, and voice in Memory.";
+  }
+}
+
+function openOnboardingPage() {
+  trackEvent("onboarding_started", { source: "sidepanel" });
+  chrome.tabs.create({ url: chrome.runtime.getURL("onboarding.html") });
 }
 
 async function loadStoredPageContext() {
@@ -425,6 +681,7 @@ async function loadStoredPageContext() {
 }
 
 async function grabPageContext() {
+  trackEvent("use_page_clicked", {});
   setStatus("Reading page context...", false);
 
   try {
@@ -434,7 +691,15 @@ async function grabPageContext() {
       throw new Error("No active tab found.");
     }
 
+    if (!isReadableTab(tab)) {
+      throw new Error("Unsupported page.");
+    }
+
     const pageContext = await askContentScriptForPageContext(tab.id);
+
+    if (pageContext?.__fmError) {
+      throw new Error(pageContext.__fmError);
+    }
 
     if (!pageContext?.latestClientMessage && !pageContext?.visibleText) {
       throw new Error("No useful page context found. Highlight the client message instead.");
@@ -444,7 +709,9 @@ async function grabPageContext() {
     await chrome.storage.local.set({ [storageKeys.pageContext]: nextPageContext });
     await applyPageContext(nextPageContext, "Page context loaded.");
   } catch (error) {
-    setStatus(readableError(error), true);
+    const userError = toUserError(error, "use_page");
+    setStatus(userError.message, true);
+    trackEvent("use_page_clicked", { status: "error", errorCategory: userError.category });
   }
 }
 
@@ -453,8 +720,10 @@ async function applyPageContext(pageContext, statusMessage) {
   currentClientMemory = await upsertClientMemory(pageContext);
   currentProjectMemory = await upsertProjectMemory(pageContext, currentClientMemory);
   currentSession = await getSessionForPage(pageContext);
+  renderClientValues();
   renderProjectValues();
   renderMemorySnapshot();
+  await renderTesterViews();
 
   const inputText = pageContext.latestClientMessage || pageContext.selectedText || "";
 
@@ -466,7 +735,7 @@ async function applyPageContext(pageContext, statusMessage) {
   const label = pageContext.threadTitle || pageContext.pageTitle || pageContext.pageUrl || "current page";
   const replyStatus = pageContext.replyBoxFound ? "reply box found" : "no reply box found";
   const clientHint = currentClientMemory?.name ? ` Client: ${currentClientMemory.name}.` : "";
-  elements.pageHint.textContent = `From ${pageContext.sourceLabel || pageContext.source || "page"}: ${label} (${replyStatus}).${clientHint}`;
+  setPageHint(`From ${pageContext.sourceLabel || pageContext.source || "page"}: ${label} (${replyStatus}).${clientHint}`, false);
   updateSessionHint();
   updateProjectHint();
   updateReplyActions();
@@ -474,6 +743,7 @@ async function applyPageContext(pageContext, statusMessage) {
 }
 
 async function grabSelection() {
+  trackEvent("use_highlight_clicked", {});
   setStatus("Reading highlighted text...", false);
 
   try {
@@ -483,16 +753,21 @@ async function grabSelection() {
       throw new Error("No active tab found.");
     }
 
+    if (!isReadableTab(tab)) {
+      throw new Error("Unsupported page.");
+    }
+
     const data = await getSelectionFromActiveTab(tab);
 
     if (data.text) {
       const pageContext = await askContentScriptForPageContext(tab.id);
+      const safePageContext = pageContext?.__fmError ? null : pageContext;
       const nextPageContext = {
         ...buildSelectionPageContext(data),
-        ...(pageContext || {}),
+        ...(safePageContext || {}),
         selectedText: data.text,
         latestClientMessage: data.text,
-        visibleText: pageContext?.visibleText || data.text,
+        visibleText: safePageContext?.visibleText || data.text,
         tabId: tab.id,
         extractedAt: Date.now()
       };
@@ -505,14 +780,17 @@ async function grabSelection() {
     if (!elements.inputText.value.trim() && data.activeEditableText) {
       elements.inputText.value = data.activeEditableText;
       await setStoredValue(storageKeys.draft, data.activeEditableText);
-      elements.pageHint.textContent = `Loaded focused field from: ${data.title || "current page"}`;
+      setPageHint(`Loaded focused field from: ${data.title || "current page"}`, false);
       setStatus("Focused field loaded.", false);
       return;
     }
 
+    setPageHint("Highlight a client message or click Use page.", true);
     setStatus("No highlighted text found. Paste the client message here.", false);
   } catch (error) {
-    setStatus(readableError(error), true);
+    const userError = toUserError(error, "use_highlight");
+    setStatus(userError.message, true);
+    trackEvent("use_highlight_clicked", { status: "error", errorCategory: userError.category });
   }
 }
 
@@ -541,17 +819,25 @@ async function getSelectionFromActiveTab(tab) {
 async function askContentScriptForSelection(tabId) {
   try {
     return await chrome.tabs.sendMessage(tabId, { type: "freelancer-memory:get-selection" });
-  } catch {
-    return null;
+  } catch (error) {
+    return { __fmError: error?.message || "Content script unavailable." };
   }
 }
 
 async function askContentScriptForPageContext(tabId) {
   try {
     return await chrome.tabs.sendMessage(tabId, { type: "freelancer-memory:get-page-context" });
-  } catch {
-    return null;
+  } catch (error) {
+    return { __fmError: error?.message || "Content script unavailable." };
   }
+}
+
+function isReadableTab(tab) {
+  if (!tab?.url) {
+    return true;
+  }
+
+  return /^https?:\/\//i.test(tab.url);
 }
 
 async function executeSelectionReader(tabId) {
@@ -641,18 +927,44 @@ function buildSelectionPageContext(selection) {
 }
 
 async function generateReply() {
-  const inputText = elements.inputText.value.trim();
-
-  if (!inputText) {
-    setStatus("Add a client message first.", true);
-    elements.inputText.focus();
+  if (isGenerating) {
     return;
   }
 
+  const inputText = elements.inputText.value.trim();
+  const forcedIntent = elements.forcedIntent.value;
+  const sourceHint = currentPageContext?.source || "";
+
+  if (!inputText) {
+    setPageHint("Add or highlight a client message first.", true);
+    setStatus("Add or highlight a client message first.", true);
+    elements.inputText.focus();
+    trackEvent("generation_failed", {
+      errorCategory: "empty_input",
+      forcedIntent,
+      source: sourceHint
+    });
+    return;
+  }
+
+  trackEvent("generate_clicked", {
+    forcedIntent,
+    source: sourceHint,
+    inputChars: inputText.length,
+    memoryScore: getMemoryScorePercent()
+  });
+
+  isGenerating = true;
   setStatus("Analyzing client and scope...", false);
   elements.generateButton.disabled = true;
   elements.copyButton.disabled = true;
   elements.insertButton.disabled = true;
+
+  const startedAt = Date.now();
+  let durationMs = 0;
+  let detectedIntent = "";
+  let riskLevel = "";
+  let outputChars = 0;
 
   try {
     await cleanExpiredSessions();
@@ -675,9 +987,11 @@ async function generateReply() {
     currentProjectMemory = analysisState.projectMemory;
     contextPacket.clientMemory = currentClientMemory;
     contextPacket.projectMemory = currentProjectMemory;
+    renderClientValues();
     renderProjectValues();
     renderMemorySnapshot();
     updateProjectHint();
+    await renderTesterViews();
     renderAnalysisSummary(analysisState.clientAnalysis, analysisState.scopeRisk, analysisState.warnings);
     renderRisk(buildAnalysisRiskDisplay(analysisState.scopeRisk));
     setStatus("Writing reply...", false);
@@ -688,16 +1002,22 @@ async function generateReply() {
       pageContext: contextPacket.pageContext,
       sessionMemory: contextPacket.sessionMemory,
       contextPacket,
-      forcedIntent: elements.forcedIntent.value,
+      forcedIntent,
       userInstruction: elements.userInstruction.value
     };
     const data = await requestGenerateReply(endpoints.generate, payload);
+
+    durationMs = Date.now() - startedAt;
+    detectedIntent = data.result?.detectedIntent || "";
+    riskLevel = data.result?.riskLevel || "";
+    outputChars = (data.result?.reply || "").length;
 
     setResult(data.result, data.usage);
     renderRisk(buildCombinedRiskDisplay(data.result, analysisState.scopeRisk));
     const memoryResult = await processResultMemoryUpdates(data.result, currentPageContext, currentClientMemory, currentProjectMemory);
     currentClientMemory = memoryResult.clientMemory;
     currentProjectMemory = memoryResult.projectMemory;
+    renderClientValues();
     renderProjectValues();
     renderMemorySnapshot();
     currentSession = await saveSessionMemory({
@@ -712,6 +1032,7 @@ async function generateReply() {
     });
     updateSessionHint();
     updateProjectHint();
+    await renderTesterViews();
     updateReplyActions();
     await chrome.storage.local.set({
       [storageKeys.draft]: inputText,
@@ -720,13 +1041,50 @@ async function generateReply() {
         usage: data.usage || null
       }
     });
-    setStatus(getReplyReadyStatus(mergeMemoryResults(analysisState.memoryResult, memoryResult), analysisState.warnings), false);
+
+    const readyStatus = getReplyReadyStatus(
+      mergeMemoryResults(analysisState.memoryResult, memoryResult),
+      analysisState.warnings
+    );
+    const slowSuffix =
+      durationMs >= slowGenerationMs
+        ? ` This took ${(durationMs / 1000).toFixed(1)}s. If it keeps happening, try again later.`
+        : "";
+    setStatus(`${readyStatus}${slowSuffix}`, false);
+
+    trackEvent("generation_succeeded", {
+      forcedIntent,
+      detectedIntent,
+      riskLevel,
+      durationMs,
+      source: sourceHint,
+      inputChars: inputText.length,
+      outputChars,
+      memoryScore: getMemoryScorePercent(),
+      status: "ok"
+    });
   } catch (error) {
-    setStatus(readableError(error), true);
+    durationMs = Date.now() - startedAt;
+    const userError = toUserError(error, "generate");
+    setStatus(userError.message, true);
+    trackEvent("generation_failed", {
+      forcedIntent,
+      durationMs,
+      source: sourceHint,
+      inputChars: inputText.length,
+      errorCategory: userError.category,
+      status: "error"
+    });
   } finally {
+    isGenerating = false;
     elements.generateButton.disabled = false;
     updateReplyActions();
   }
+}
+
+function getMemoryScorePercent() {
+  const completed = importantFields.filter((field) => context[field]?.trim()).length;
+  return Math.round((completed / importantFields.length) * 100);
 }
 
 async function runAnalysisStep(endpoints, contextPacket) {
@@ -784,25 +1142,41 @@ async function requestGenerateReply(endpoint, payload) {
   return requestApiResult(endpoint, payload, "Generation failed.");
 }
 
+const requestTimeoutMs = 45000;
+
 async function requestApiResult(endpoint, payload, fallbackMessage) {
   const headers = {
     "Content-Type": "application/json"
   };
-  const betaKey = elements.betaKey?.value.trim();
+  const openaiKey = elements.openaiKey?.value.trim();
 
-  if (betaKey) {
-    headers["x-fm-beta-key"] = betaKey;
+  if (openaiKey && openaiKey.startsWith("sk-")) {
+    headers["x-fm-openai-key"] = openaiKey;
   }
 
   if (installId) {
     headers["x-fm-install-id"] = installId;
   }
 
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(payload)
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
+
+  let response;
+  try {
+    response = await fetch(endpoint, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload),
+      signal: controller.signal
+    });
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      throw new Error("Request timeout. The reply service did not respond in time.");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 
   const data = await response.json().catch(() => ({}));
 
@@ -958,17 +1332,32 @@ async function copyReply() {
   const reply = elements.replyOutput.value.trim();
 
   if (!reply) {
+    setStatus("Generate a reply first.", true);
+    trackEvent("copy_clicked", { status: "error", errorCategory: "no_reply" });
     return;
   }
+
+  trackEvent("copy_clicked", { outputChars: reply.length });
 
   try {
     await navigator.clipboard.writeText(reply);
     setStatus("Copied.", false);
-  } catch {
-    elements.replyOutput.select();
-    document.execCommand("copy");
-    window.getSelection()?.removeAllRanges();
-    setStatus("Copied.", false);
+  } catch (error) {
+    try {
+      elements.replyOutput.select();
+      const ok = document.execCommand("copy");
+      window.getSelection()?.removeAllRanges();
+
+      if (!ok) {
+        throw new Error("Clipboard write rejected.");
+      }
+
+      setStatus("Copied.", false);
+    } catch (fallbackError) {
+      const userError = toUserError(fallbackError || error, "copy");
+      setStatus(userError.message, true);
+      trackEvent("copy_clicked", { status: "error", errorCategory: userError.category });
+    }
   }
 }
 
@@ -976,9 +1365,12 @@ async function insertReplyIntoPage() {
   const reply = elements.replyOutput.value.trim();
 
   if (!reply) {
+    setStatus("Generate a reply first.", true);
+    trackEvent("insert_clicked", { status: "error", errorCategory: "no_reply" });
     return;
   }
 
+  trackEvent("insert_clicked", { outputChars: reply.length, source: currentPageContext?.source || "" });
   setStatus("Inserting reply...", false);
 
   try {
@@ -1009,10 +1401,17 @@ async function insertReplyIntoPage() {
         projectMemory: currentProjectMemory
       });
     }
+    await renderTesterViews();
 
     setStatus("Inserted. Review before sending.", false);
   } catch (error) {
-    setStatus(readableError(error), true);
+    const userError = toUserError(error, "insert");
+    setStatus(userError.message, true);
+    trackEvent("insert_clicked", {
+      status: "error",
+      errorCategory: userError.category,
+      source: currentPageContext?.source || ""
+    });
   }
 }
 
@@ -1025,6 +1424,10 @@ async function refreshPageContextSilently() {
     }
 
     const pageContext = await askContentScriptForPageContext(tab.id);
+
+    if (pageContext?.__fmError) {
+      return;
+    }
 
     if (pageContext?.latestClientMessage || pageContext?.visibleText) {
       currentPageContext = { ...pageContext, tabId: tab.id };
@@ -1989,21 +2392,27 @@ async function acceptPendingMemoryUpdate(updateId) {
   pendingMemoryUpdates = pendingMemoryUpdates.filter((item) => item.id !== updateId);
   await syncPendingMemoryUpdates();
   renderPendingMemoryUpdates();
+  renderClientValues();
   renderProjectValues();
   renderMemorySnapshot();
   updateProjectHint();
+  await renderTesterViews();
   setStatus("Memory update accepted.", false);
+  trackEvent("pending_memory_accepted", { target: update.target || "", field: update.field || "" });
 }
 
 async function rejectPendingMemoryUpdate(updateId) {
+  const update = pendingMemoryUpdates.find((item) => item.id === updateId);
   pendingMemoryUpdates = pendingMemoryUpdates.filter((item) => item.id !== updateId);
   await syncPendingMemoryUpdates();
   renderPendingMemoryUpdates();
   setStatus("Memory update rejected.", false);
+  trackEvent("pending_memory_rejected", { target: update?.target || "", field: update?.field || "" });
 }
 
 async function acceptAllPendingMemoryUpdates() {
   const updateIds = pendingMemoryUpdates.map((update) => update.id);
+  const acceptedCount = updateIds.length;
 
   for (const updateId of updateIds) {
     const update = pendingMemoryUpdates.find((item) => item.id === updateId);
@@ -2022,17 +2431,137 @@ async function acceptAllPendingMemoryUpdates() {
   pendingMemoryUpdates = [];
   await syncPendingMemoryUpdates();
   renderPendingMemoryUpdates();
+  renderClientValues();
   renderProjectValues();
   renderMemorySnapshot();
   updateProjectHint();
+  await renderTesterViews();
   setStatus("All memory updates accepted.", false);
+  trackEvent("pending_memory_accepted", { bulk: true, count: acceptedCount });
 }
 
 async function rejectAllPendingMemoryUpdates() {
+  const rejectedCount = pendingMemoryUpdates.length;
   pendingMemoryUpdates = [];
   await syncPendingMemoryUpdates();
   renderPendingMemoryUpdates();
   setStatus("All memory updates rejected.", false);
+  trackEvent("pending_memory_rejected", { bulk: true, count: rejectedCount });
+}
+
+async function resetClientMemory() {
+  if (!confirmResetAction("client", "Click Reset client again to confirm.")) {
+    return;
+  }
+
+  const clientId = currentClientMemory?.id;
+
+  if (clientId) {
+    const clients = await loadClientMemories();
+    const sessions = await loadSessions();
+    const projects = await loadProjectMemories();
+    await chrome.storage.local.set({
+      [storageKeys.clients]: clients.filter((client) => client.id !== clientId),
+      [storageKeys.sessions]: sessions.filter((session) => session.clientId !== clientId),
+      [storageKeys.projects]: projects.filter((project) => project.clientId !== clientId)
+    });
+  }
+
+  currentClientMemory = null;
+  currentProjectMemory = null;
+  currentSession = null;
+  pendingMemoryUpdates = pendingMemoryUpdates.filter((update) => update.target !== "client" && update.target !== "project");
+  await syncPendingMemoryUpdates();
+  renderPendingMemoryUpdates();
+  renderClientValues();
+  renderProjectValues();
+  renderMemorySnapshot();
+  updateProjectHint();
+  await renderTesterViews();
+  setStatus("Client context reset.", false);
+}
+
+async function resetProjectMemory() {
+  if (!confirmResetAction("project", "Click Reset project again to confirm.")) {
+    return;
+  }
+
+  const projectId = currentProjectMemory?.id;
+
+  if (projectId) {
+    const projects = await loadProjectMemories();
+    const sessions = await loadSessions();
+    await chrome.storage.local.set({
+      [storageKeys.projects]: projects.filter((project) => project.id !== projectId),
+      [storageKeys.sessions]: sessions.filter((session) => session.projectId !== projectId)
+    });
+  }
+
+  currentProjectMemory = null;
+  currentSession = null;
+  pendingMemoryUpdates = pendingMemoryUpdates.filter((update) => update.target !== "project");
+  await syncPendingMemoryUpdates();
+  renderPendingMemoryUpdates();
+  renderClientValues();
+  renderProjectValues();
+  renderMemorySnapshot();
+  updateProjectHint();
+  await renderTesterViews();
+  setStatus("Project context reset.", false);
+}
+
+async function resetAllContextMemory() {
+  if (!confirmResetAction("all", "Click Reset all context again to confirm.")) {
+    return;
+  }
+
+  currentPageContext = null;
+  currentClientMemory = null;
+  currentProjectMemory = null;
+  currentSession = null;
+  pendingMemoryUpdates = [];
+  result = null;
+  elements.inputText.value = "";
+  elements.replyOutput.value = "";
+  elements.replyMeta.hidden = true;
+  elements.replyMeta.textContent = "";
+  elements.intentBadge.textContent = "waiting";
+  elements.confidenceBadge.textContent = "auto";
+  renderRisk(null);
+  elements.analysisBox.hidden = true;
+  elements.analysisBox.replaceChildren();
+
+  await chrome.storage.local.remove([
+    storageKeys.clients,
+    storageKeys.projects,
+    storageKeys.sessions,
+    storageKeys.pendingUpdates,
+    storageKeys.pageContext,
+    storageKeys.lastSelection,
+    storageKeys.lastResult,
+    storageKeys.draft
+  ]);
+
+  renderPendingMemoryUpdates();
+  renderClientValues();
+  renderProjectValues();
+  renderMemorySnapshot();
+  updateInputEmptyState();
+  updateProjectHint();
+  updateReplyActions();
+  await renderTesterViews();
+  setStatus("All context memory reset.", false);
+}
+
+function confirmResetAction(action, message) {
+  if (pendingResetAction !== action) {
+    pendingResetAction = action;
+    setStatus(message, false);
+    return false;
+  }
+
+  pendingResetAction = "";
+  return true;
 }
 
 async function applyClientPendingUpdate(update) {
@@ -2093,7 +2622,56 @@ async function handleProjectFieldChange(event) {
   });
   updateProjectHint();
   renderMemorySnapshot();
+  await renderTesterViews();
   setStatus("Project memory saved.", false);
+}
+
+async function handleClientFieldChange(event) {
+  const key = event.target.dataset.clientKey;
+
+  if (!key) {
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const base =
+    currentClientMemory || {
+      id: crypto.randomUUID(),
+      name: "New client",
+      company: "",
+      emailOrHandle: "",
+      source: normalizeSource(currentPageContext?.source),
+      lastSeenUrl: currentPageContext?.pageUrl || "",
+      notes: [],
+      status: "lead",
+      createdAt: now,
+      updatedAt: now
+    };
+  const kind = event.target.dataset.clientKind;
+  const value = kind === "list" ? normalizeStringList(event.target.value) : event.target.value;
+
+  currentClientMemory = await saveClientMemory({
+    ...base,
+    [key]: key === "source" ? normalizeSource(value) : value,
+    updatedAt: now
+  });
+  renderClientValues();
+  renderMemorySnapshot();
+  await renderTesterViews();
+  setStatus("Client memory saved.", false);
+}
+
+function renderClientValues() {
+  for (const [key, , , , kind] of clientFields) {
+    const control = document.querySelector(`#client-${key}`);
+
+    if (!control) {
+      continue;
+    }
+
+    const value = currentClientMemory?.[key];
+    control.value = kind === "list" ? normalizeStringList(value).join("\n") : value || (kind === "source" ? "generic" : kind === "clientStatus" ? "lead" : "");
+  }
 }
 
 function renderProjectValues() {
@@ -2109,46 +2687,111 @@ function renderProjectValues() {
   }
 }
 
+async function renderContextSelectors() {
+  const [clients, projects] = await Promise.all([loadClientMemories(), loadProjectMemories()]);
+  const clientOptions = [
+    buildSelectOption("", "No client selected"),
+    ...clients.map((client) => buildSelectOption(client.id, [client.name || "Unknown client", client.company, client.emailOrHandle].filter(Boolean).join(" - ")))
+  ];
+  const projectOptions = [
+    buildSelectOption("", "No project selected"),
+    ...projects.map((project) => {
+      const client = clients.find((item) => item.id === project.clientId);
+      const label = [project.title || "Client project", client?.name ? `for ${client.name}` : ""].filter(Boolean).join(" ");
+      return buildSelectOption(project.id, label);
+    })
+  ];
+
+  elements.activeClientSelect.replaceChildren(...clientOptions);
+  elements.activeProjectSelect.replaceChildren(...projectOptions);
+  elements.activeClientSelect.value = currentClientMemory?.id || "";
+  elements.activeProjectSelect.value = currentProjectMemory?.id || "";
+}
+
+function buildSelectOption(value, label) {
+  const option = document.createElement("option");
+  option.value = value;
+  option.textContent = label;
+  return option;
+}
+
+async function handleActiveClientSelectChange() {
+  const clientId = elements.activeClientSelect.value;
+
+  if (!clientId) {
+    currentClientMemory = null;
+    currentProjectMemory = null;
+    currentSession = null;
+    renderClientValues();
+    renderProjectValues();
+    renderMemorySnapshot();
+    updateSessionHint();
+    updateProjectHint();
+    await renderTesterViews();
+    setStatus("No active client selected.", false);
+    return;
+  }
+
+  await activateClientMemory(clientId);
+  showSavedInfoTab("client");
+}
+
+async function handleActiveProjectSelectChange() {
+  const projectId = elements.activeProjectSelect.value;
+
+  if (!projectId) {
+    currentProjectMemory = null;
+    currentSession = await getSessionForClientOrProject(currentClientMemory?.id, "");
+    renderProjectValues();
+    renderMemorySnapshot();
+    updateSessionHint();
+    updateProjectHint();
+    await renderTesterViews();
+    setStatus("No active project selected.", false);
+    return;
+  }
+
+  await activateProjectMemory(projectId);
+  showSavedInfoTab("project");
+}
+
 function renderMemorySnapshot() {
   if (!elements.memorySnapshot) {
     return;
   }
 
-  const clientCard = buildSnapshotCard({
-    title: currentClientMemory?.name || "No client detected yet",
-    status: currentClientMemory?.status || "lead",
-    body: currentClientMemory
-      ? [currentClientMemory.company, currentClientMemory.emailOrHandle, currentClientMemory.source].filter(Boolean).join(" · ") || "Client memory found."
-      : "Use page or highlight text to create client memory.",
-    groups: [
-      {
-        label: "Notes",
-        items: currentClientMemory?.notes || []
-      }
-    ]
-  });
-  const projectCard = buildSnapshotCard({
-    title: currentProjectMemory?.title || "No project detected yet",
-    status: currentProjectMemory?.status || "discovery",
-    body: currentProjectMemory?.nextStep ? `Next: ${currentProjectMemory.nextStep}` : "Latest next step appears here after generation.",
-    groups: [
-      {
-        label: "Included",
-        items: currentProjectMemory?.includedScope || []
-      },
-      {
-        label: "Excluded",
-        items: currentProjectMemory?.excludedScope || []
-      },
-      {
-        label: "Risks",
-        items: currentProjectMemory?.risks || [],
-        kind: "risk"
-      }
-    ]
-  });
+  const labelByKey = new Map(contextFields.map(([key, label]) => [key, label]));
+  const filledBusinessFields = importantFields.filter((field) => context[field]?.trim()).map((field) => labelByKey.get(field) || field);
+  const clientText = currentClientMemory
+    ? [currentClientMemory.name || "Unknown client", currentClientMemory.company, currentClientMemory.emailOrHandle, currentClientMemory.status]
+        .filter(Boolean)
+        .join(" - ")
+    : "No active client yet. Use page or choose one in Memory.";
+  const projectText = currentProjectMemory
+    ? [currentProjectMemory.title || "Client project", currentProjectMemory.budget, currentProjectMemory.timeline, currentProjectMemory.nextStep]
+        .filter(Boolean)
+        .join(" - ")
+    : "No active project yet. Use page or choose one in Memory.";
+  const businessText = filledBusinessFields.length
+    ? `${filledBusinessFields.length}/${importantFields.length} key fields filled: ${filledBusinessFields.join(", ")}`
+    : "Add your services, pricing, and voice in Memory.";
 
-  elements.memorySnapshot.replaceChildren(clientCard, projectCard);
+  elements.memorySnapshot.replaceChildren(
+    buildSummaryRow("Active client", clientText, !currentClientMemory),
+    buildSummaryRow("Active project", projectText, !currentProjectMemory),
+    buildSummaryRow("Business memory", businessText, !filledBusinessFields.length)
+  );
+}
+
+function buildSummaryRow(label, value, isEmpty = false) {
+  const row = document.createElement("article");
+  row.className = isEmpty ? "summary-row empty" : "summary-row";
+  const labelNode = document.createElement("strong");
+  labelNode.textContent = label;
+  const valueNode = document.createElement("p");
+  valueNode.textContent = value;
+  row.append(labelNode, valueNode);
+  return row;
 }
 
 function buildSnapshotCard({ title, status, body, groups }) {
@@ -2189,6 +2832,765 @@ function buildSnapshotCard({ title, status, body, groups }) {
   }
 
   return card;
+}
+
+async function renderTesterViews() {
+  await Promise.all([renderContextSelectors(), renderAllClientsView(), renderAllProjectsView(), renderSessionTester()]);
+}
+
+async function renderAllClientsView() {
+  const [clients, projects] = await Promise.all([loadClientMemories(), loadProjectMemories()]);
+
+  elements.clientsEmpty.hidden = clients.length > 0;
+  elements.clientsList.replaceChildren(
+    ...clients.map((client) => {
+      const relatedProjects = projects.filter((project) => project.clientId === client.id);
+      const card = buildMemoryListCard({
+        id: client.id,
+        type: "client",
+        title: client.name || "Unknown client",
+        status: client.status || "lead",
+        active: client.id === currentClientMemory?.id,
+        rows: [
+          ["Source", client.source || "generic"],
+          ["Email/handle", client.emailOrHandle || "empty"],
+          ["Company", client.company || "empty"],
+          ["Updated", formatRelativeTime(client.updatedAt)]
+        ],
+        groups: [
+          {
+            label: "Recent notes",
+            items: client.notes || []
+          },
+          {
+            label: "Projects",
+            items: relatedProjects.map((project) => project.title)
+          }
+        ],
+        actions: [
+          ["reset-client", "Reset"],
+          ["delete-client", "Delete"]
+        ]
+      });
+
+      return card;
+    })
+  );
+}
+
+async function renderAllProjectsView() {
+  const [clients, projects] = await Promise.all([loadClientMemories(), loadProjectMemories()]);
+
+  elements.projectsEmpty.hidden = projects.length > 0;
+  elements.projectsList.replaceChildren(
+    ...projects.map((project) => {
+      const client = clients.find((item) => item.id === project.clientId);
+      const scopeCount = (project.includedScope?.length || 0) + (project.excludedScope?.length || 0);
+      const riskCount = project.risks?.length || 0;
+
+      return buildMemoryListCard({
+        id: project.id,
+        type: "project",
+        title: project.title || "Client project",
+        status: project.status || "discovery",
+        active: project.id === currentProjectMemory?.id,
+        rows: [
+          ["Client", client ? client.name : project.clientId ? "missing client" : "unlinked"],
+          ["Budget", project.budget || "empty"],
+          ["Timeline", project.timeline || "empty"],
+          ["Scope", `${scopeCount} item${scopeCount === 1 ? "" : "s"}`],
+          ["Risks", `${riskCount}`],
+          ["Updated", formatRelativeTime(project.updatedAt)]
+        ],
+        groups: [
+          {
+            label: "Next step",
+            items: project.nextStep ? [project.nextStep] : []
+          }
+        ],
+        actions: [
+          ["reset-project", "Reset"],
+          ["delete-project", "Delete"]
+        ]
+      });
+    })
+  );
+}
+
+function buildMemoryListCard({ id, type, title, status, active, rows, groups, actions }) {
+  const card = document.createElement("article");
+  card.className = "memory-card";
+  card.dataset[type === "client" ? "clientId" : "projectId"] = id;
+  card.dataset.active = String(Boolean(active));
+
+  const top = document.createElement("header");
+  const heading = document.createElement("h3");
+  heading.textContent = title;
+  const pill = document.createElement("span");
+  pill.className = "pill";
+  pill.textContent = status.replaceAll("_", " ");
+  top.append(heading, pill);
+
+  const meta = document.createElement("div");
+  meta.className = "memory-meta";
+
+  for (const [label, value] of rows) {
+    const row = document.createElement("p");
+    const labelNode = document.createElement("strong");
+    labelNode.textContent = `${label}: `;
+    row.append(labelNode, document.createTextNode(value || "empty"));
+    meta.append(row);
+  }
+
+  const actionRow = document.createElement("div");
+  actionRow.className = "pending-actions";
+
+  for (const [action, label] of actions) {
+    const button = document.createElement("button");
+    button.className = action.startsWith("delete") ? "button danger" : "button secondary";
+    button.type = "button";
+    button.dataset.action = action;
+    button.dataset.id = id;
+    button.textContent = label;
+    actionRow.append(button);
+  }
+
+  card.append(top, meta, ...buildMemoryGroups(groups), actionRow);
+  return card;
+}
+
+function buildMemoryGroups(groups) {
+  return groups
+    .map((group) => {
+      const items = normalizeStringList(group.items).slice(-4);
+
+      if (!items.length) {
+        return null;
+      }
+
+      const wrapper = document.createElement("div");
+      wrapper.className = "mini-list";
+
+      for (const item of items) {
+        const row = document.createElement("span");
+        row.textContent = `${group.label}: ${item}`;
+        wrapper.append(row);
+      }
+
+      return wrapper;
+    })
+    .filter(Boolean);
+}
+
+async function handleClientsListClick(event) {
+  const button = event.target.closest("button[data-action][data-id]");
+
+  if (button) {
+    await handleClientAction(button.dataset.action, button.dataset.id);
+    return;
+  }
+
+  const card = event.target.closest("[data-client-id]");
+
+  if (!card) {
+    return;
+  }
+
+  await activateClientMemory(card.dataset.clientId);
+}
+
+async function handleProjectsListClick(event) {
+  const button = event.target.closest("button[data-action][data-id]");
+
+  if (button) {
+    await handleProjectAction(button.dataset.action, button.dataset.id);
+    return;
+  }
+
+  const card = event.target.closest("[data-project-id]");
+
+  if (!card) {
+    return;
+  }
+
+  await activateProjectMemory(card.dataset.projectId);
+}
+
+async function activateClientMemory(clientId) {
+  const [clients, projects] = await Promise.all([loadClientMemories(), loadProjectMemories()]);
+  const client = clients.find((item) => item.id === clientId);
+
+  if (!client) {
+    return;
+  }
+
+  currentClientMemory = client;
+  currentProjectMemory = projects.find((project) => project.clientId === client.id) || null;
+  currentSession = await getSessionForClientOrProject(currentClientMemory?.id, currentProjectMemory?.id);
+  renderClientValues();
+  renderProjectValues();
+  renderMemorySnapshot();
+  updateSessionHint();
+  updateProjectHint();
+  updateReplyActions();
+  await renderTesterViews();
+  setStatus(`Active client: ${client.name || "Unknown client"}.`, false);
+}
+
+async function activateProjectMemory(projectId) {
+  const [clients, projects] = await Promise.all([loadClientMemories(), loadProjectMemories()]);
+  const project = projects.find((item) => item.id === projectId);
+
+  if (!project) {
+    return;
+  }
+
+  currentProjectMemory = project;
+  currentClientMemory = clients.find((client) => client.id === project.clientId) || currentClientMemory;
+  currentSession = await getSessionForClientOrProject(currentClientMemory?.id, currentProjectMemory?.id);
+  renderClientValues();
+  renderProjectValues();
+  renderMemorySnapshot();
+  updateSessionHint();
+  updateProjectHint();
+  updateReplyActions();
+  await renderTesterViews();
+  setStatus(`Active project: ${project.title}.`, false);
+}
+
+async function handleClientAction(action, clientId) {
+  if (action === "delete-client") {
+    await deleteClientMemoryById(clientId);
+    return;
+  }
+
+  await resetClientMemoryById(clientId);
+}
+
+async function handleProjectAction(action, projectId) {
+  if (action === "delete-project") {
+    await deleteProjectMemoryById(projectId);
+    return;
+  }
+
+  await resetProjectMemoryById(projectId);
+}
+
+async function deleteClientMemoryById(clientId) {
+  const [clients, projects, sessions] = await Promise.all([loadClientMemories(), loadProjectMemories(), loadSessions()]);
+  const relatedProjectIds = new Set(projects.filter((project) => project.clientId === clientId).map((project) => project.id));
+  await chrome.storage.local.set({
+    [storageKeys.clients]: clients.filter((client) => client.id !== clientId),
+    [storageKeys.projects]: projects.filter((project) => project.clientId !== clientId),
+    [storageKeys.sessions]: sessions.filter((session) => session.clientId !== clientId)
+  });
+
+  if (currentClientMemory?.id === clientId) {
+    currentClientMemory = null;
+    currentProjectMemory = null;
+    currentSession = null;
+  }
+
+  pendingMemoryUpdates = pendingMemoryUpdates.filter((update) => update.targetId !== clientId && !relatedProjectIds.has(update.targetId));
+  await syncPendingMemoryUpdates();
+  renderPendingMemoryUpdates();
+  renderClientValues();
+  renderProjectValues();
+  renderMemorySnapshot();
+  updateSessionHint();
+  updateProjectHint();
+  setStatus("Client deleted.", false);
+}
+
+async function resetClientMemoryById(clientId) {
+  const clients = await loadClientMemories();
+  const client = clients.find((item) => item.id === clientId);
+
+  if (!client) {
+    return;
+  }
+
+  const nextClient = await saveClientMemory({
+    ...client,
+    notes: [],
+    status: "lead"
+  });
+
+  if (currentClientMemory?.id === clientId) {
+    currentClientMemory = nextClient;
+    renderClientValues();
+    renderMemorySnapshot();
+  }
+
+  setStatus("Client reset.", false);
+}
+
+async function deleteProjectMemoryById(projectId) {
+  const [projects, sessions] = await Promise.all([loadProjectMemories(), loadSessions()]);
+  await chrome.storage.local.set({
+    [storageKeys.projects]: projects.filter((project) => project.id !== projectId),
+    [storageKeys.sessions]: sessions.filter((session) => session.projectId !== projectId)
+  });
+
+  if (currentProjectMemory?.id === projectId) {
+    currentProjectMemory = null;
+    currentSession = null;
+  }
+
+  pendingMemoryUpdates = pendingMemoryUpdates.filter((update) => update.targetId !== projectId);
+  await syncPendingMemoryUpdates();
+  renderPendingMemoryUpdates();
+  renderClientValues();
+  renderProjectValues();
+  renderMemorySnapshot();
+  updateSessionHint();
+  updateProjectHint();
+  setStatus("Project deleted.", false);
+}
+
+async function resetProjectMemoryById(projectId) {
+  const projects = await loadProjectMemories();
+  const project = projects.find((item) => item.id === projectId);
+
+  if (!project) {
+    return;
+  }
+
+  const nextProject = await saveProjectMemory({
+    ...project,
+    budget: "",
+    timeline: "",
+    status: "discovery",
+    includedScope: [],
+    excludedScope: [],
+    paymentTerms: "",
+    agreedFacts: [],
+    risks: [],
+    nextStep: ""
+  });
+
+  if (currentProjectMemory?.id === projectId) {
+    currentProjectMemory = nextProject;
+    renderProjectValues();
+    renderMemorySnapshot();
+    updateProjectHint();
+  }
+
+  setStatus("Project reset.", false);
+}
+
+async function getSessionForClientOrProject(clientId, projectId) {
+  const sessions = await loadSessions();
+  const now = Date.now();
+
+  return (
+    sessions.find((session) => projectId && session.projectId === projectId && session.expiresAt > now) ||
+    sessions.find((session) => clientId && session.clientId === clientId && session.expiresAt > now) ||
+    null
+  );
+}
+
+async function refreshSessionTester() {
+  await cleanExpiredSessions();
+
+  if (currentPageContext) {
+    currentSession = await getSessionForPage(currentPageContext);
+  }
+
+  currentSession = currentSession || (await getSessionForClientOrProject(currentClientMemory?.id, currentProjectMemory?.id));
+  await renderSessionTester();
+  updateSessionHint();
+  setStatus("Session refreshed.", false);
+}
+
+async function clearActiveSession() {
+  const session = await getVisibleSession();
+
+  if (!session?.id) {
+    setStatus("No active session to clear.", false);
+    return;
+  }
+
+  const sessions = await loadSessions();
+  await chrome.storage.local.set({ [storageKeys.sessions]: sessions.filter((item) => item.id !== session.id) });
+
+  if (currentSession?.id === session.id) {
+    currentSession = null;
+  }
+
+  await renderSessionTester();
+  updateSessionHint();
+  setStatus("Session cleared.", false);
+}
+
+async function expireActiveSession() {
+  const session = await getVisibleSession();
+
+  if (!session?.id) {
+    setStatus("No active session to expire.", false);
+    return;
+  }
+
+  const sessions = await loadSessions();
+  await chrome.storage.local.set({
+    [storageKeys.sessions]: sessions.map((item) => (item.id === session.id ? { ...item, expiresAt: Date.now() - 1000 } : item))
+  });
+  await cleanExpiredSessions();
+
+  if (currentSession?.id === session.id) {
+    currentSession = null;
+  }
+
+  await renderSessionTester();
+  updateSessionHint();
+  setStatus("Session expired.", false);
+}
+
+async function renderSessionTester() {
+  const [clients, projects] = await Promise.all([loadClientMemories(), loadProjectMemories()]);
+  const session = await getVisibleSession();
+  elements.sessionEmpty.hidden = Boolean(session);
+
+  if (!session) {
+    elements.sessionDetails.replaceChildren();
+    return;
+  }
+
+  const client = clients.find((item) => item.id === session.clientId);
+  const project = projects.find((item) => item.id === session.projectId);
+  const minutesLeft = Math.max(0, Math.ceil((session.expiresAt - Date.now()) / 60000));
+  const card = buildMemoryListCard({
+    id: session.id,
+    type: "project",
+    title: session.domain || "Active session",
+    status: `${minutesLeft} min left`,
+    active: true,
+    rows: [
+      ["Page URL", session.pageUrl || "empty"],
+      ["Client", client ? client.name : session.clientId || "unlinked"],
+      ["Project", project ? project.title : session.projectId || "unlinked"],
+      ["Last instruction", session.lastUserInstruction || "empty"],
+      ["Next step", session.nextStep || "empty"]
+    ],
+    groups: [
+      {
+        label: "Last client message",
+        items: session.lastClientMessage ? [session.lastClientMessage] : []
+      },
+      {
+        label: "Last generated reply",
+        items: session.lastGeneratedReply ? [session.lastGeneratedReply] : []
+      },
+      {
+        label: "Facts",
+        items: session.facts || []
+      }
+    ],
+    actions: []
+  });
+
+  elements.sessionDetails.replaceChildren(card);
+}
+
+async function getVisibleSession() {
+  const sessions = await loadSessions();
+  const now = Date.now();
+  const freshSessions = sessions.filter((session) => session.expiresAt > now);
+
+  if (currentSession?.id) {
+    const matching = freshSessions.find((session) => session.id === currentSession.id);
+
+    if (matching) {
+      return matching;
+    }
+  }
+
+  if (currentPageContext) {
+    const pageSession = await getSessionForPage(currentPageContext);
+
+    if (pageSession) {
+      return pageSession;
+    }
+  }
+
+  return (
+    freshSessions.find((session) => currentProjectMemory?.id && session.projectId === currentProjectMemory.id) ||
+    freshSessions.find((session) => currentClientMemory?.id && session.clientId === currentClientMemory.id) ||
+    freshSessions[0] ||
+    null
+  );
+}
+
+async function handleImportFileChange() {
+  const file = elements.importFile.files?.[0];
+
+  if (!file) {
+    return;
+  }
+
+  const extension = file.name.split(".").pop()?.toLowerCase();
+
+  if (!["txt", "md", "json"].includes(extension || "")) {
+    elements.importStatus.textContent = "Use a .txt, .md, or .json file.";
+    elements.importStatus.classList.add("error");
+    return;
+  }
+
+  elements.importText.value = await file.text();
+  elements.importStatus.textContent = `Loaded ${file.name}.`;
+  elements.importStatus.classList.remove("error");
+}
+
+async function importExistingContext() {
+  const rawText = elements.importText.value.trim();
+  const target = elements.importTarget.value;
+  const source = normalizeSource(elements.importSource.value);
+  const parsed = parseImportContext(rawText);
+  const now = new Date().toISOString();
+  let importedClient = currentClientMemory;
+  let importedProject = currentProjectMemory;
+
+  if (!rawText && !elements.importClientName.value.trim() && !elements.importProjectTitle.value.trim()) {
+    setImportStatus("Paste context or fill at least one field.", true);
+    return;
+  }
+
+  if (target !== "project") {
+    const clients = await loadClientMemories();
+    const name = trimStorageText(elements.importClientName.value || parsed.clientName || parsed.company || parsed.emailOrHandle || "Imported client", 140);
+    const emailOrHandle = trimStorageText(elements.importEmailHandle.value || parsed.emailOrHandle || "", 160);
+    const company = trimStorageText(elements.importCompany.value || parsed.company || "", 140);
+    const existing = findMatchingClient(clients, { source, name, emailOrHandle, pageUrl: "" });
+
+    importedClient = await saveClientMemory({
+      id: existing?.id || crypto.randomUUID(),
+      name: name || existing?.name || "Imported client",
+      company: company || existing?.company || "",
+      emailOrHandle: emailOrHandle || existing?.emailOrHandle || "",
+      source,
+      lastSeenUrl: existing?.lastSeenUrl || "",
+      notes: mergeFacts(existing?.notes || [], parsed.notes),
+      status: existing?.status || parsed.status || "lead",
+      createdAt: existing?.createdAt || now,
+      updatedAt: now
+    });
+  }
+
+  if (target !== "client" && hasImportProjectContext(parsed)) {
+    const projects = await loadProjectMemories();
+    const title = trimStorageText(elements.importProjectTitle.value || parsed.projectTitle || "Imported project", 160);
+    const existing =
+      projects.find((project) => importedClient?.id && project.clientId === importedClient.id && normalizeClientKey(project.title) === normalizeClientKey(title)) ||
+      projects.find((project) => normalizeClientKey(project.title) === normalizeClientKey(title));
+
+    importedProject = await saveProjectMemory({
+      id: existing?.id || crypto.randomUUID(),
+      clientId: importedClient?.id || existing?.clientId || "",
+      title: title || existing?.title || "Imported project",
+      budget: parsed.budget || existing?.budget || "",
+      timeline: parsed.timeline || existing?.timeline || "",
+      status: projectStatuses.includes(normalizeImportStatus(parsed.status)) ? normalizeImportStatus(parsed.status) : existing?.status || "discovery",
+      includedScope: mergeFacts(existing?.includedScope || [], parsed.includedScope),
+      excludedScope: mergeFacts(existing?.excludedScope || [], parsed.excludedScope),
+      paymentTerms: parsed.paymentTerms || existing?.paymentTerms || "",
+      agreedFacts: mergeFacts(existing?.agreedFacts || [], parsed.agreedFacts),
+      risks: mergeFacts(existing?.risks || [], parsed.risks),
+      nextStep: parsed.nextStep || existing?.nextStep || "",
+      sourceUrls: existing?.sourceUrls || [],
+      createdAt: existing?.createdAt || now,
+      updatedAt: now
+    });
+  }
+
+  currentClientMemory = importedClient;
+  currentProjectMemory = importedProject;
+  renderClientValues();
+  renderProjectValues();
+  renderMemorySnapshot();
+  updateProjectHint();
+  await renderTesterViews();
+  setImportStatus("Imported to Chrome storage. No AI used.", false);
+  setStatus("Existing context imported.", false);
+}
+
+function parseImportContext(rawText) {
+  const text = stringifyImportInput(rawText);
+  const parsed = {
+    clientName: "",
+    company: "",
+    emailOrHandle: "",
+    projectTitle: "",
+    status: "",
+    budget: "",
+    timeline: "",
+    includedScope: [],
+    excludedScope: [],
+    paymentTerms: "",
+    agreedFacts: [],
+    risks: [],
+    nextStep: "",
+    notes: []
+  };
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  let section = "";
+
+  for (const line of lines) {
+    const clean = stripListMarker(line);
+    const labelMatch = clean.match(/^([a-z][a-z\s/_-]{1,40}):\s*(.*)$/i);
+    const label = labelMatch ? labelMatch[1].trim().toLowerCase() : "";
+    const value = trimStorageText(labelMatch ? labelMatch[2] : clean, 240);
+
+    if (label) {
+      section = getImportSection(label);
+      applyImportLabeledValue(parsed, section, value);
+      continue;
+    }
+
+    if (section && value) {
+      appendImportSectionValue(parsed, section, value);
+      continue;
+    }
+
+    applyImportFreeformLine(parsed, value);
+  }
+
+  parsed.emailOrHandle = parsed.emailOrHandle || text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] || text.match(/@\w{2,30}/)?.[0] || "";
+  parsed.notes = normalizeStringList(parsed.notes.length ? parsed.notes : lines.slice(0, 6));
+
+  return parsed;
+}
+
+function stringifyImportInput(rawText) {
+  try {
+    const parsed = JSON.parse(rawText);
+    return flattenJsonForImport(parsed).join("\n");
+  } catch {
+    return rawText;
+  }
+}
+
+function flattenJsonForImport(value, prefix = "") {
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => flattenJsonForImport(item, prefix));
+  }
+
+  if (value && typeof value === "object") {
+    return Object.entries(value).flatMap(([key, child]) => flattenJsonForImport(child, prefix ? `${prefix} ${key}` : key));
+  }
+
+  return [`${prefix}: ${String(value || "")}`];
+}
+
+function stripListMarker(value) {
+  return String(value || "").replace(/^[-*•]\s*/, "").trim();
+}
+
+function getImportSection(label) {
+  if (/^client|client name|name$/.test(label)) return "clientName";
+  if (/company|business|organization/.test(label)) return "company";
+  if (/email|handle|contact/.test(label)) return "emailOrHandle";
+  if (/project|project title|title/.test(label)) return "projectTitle";
+  if (/status/.test(label)) return "status";
+  if (/budget|price|cost|quote|rate/.test(label)) return "budget";
+  if (/timeline|deadline|due|delivery|launch/.test(label)) return "timeline";
+  if (/excluded|out of scope|not included/.test(label)) return "excludedScope";
+  if (/included|included scope|deliverables|scope|features|pages/.test(label)) return "includedScope";
+  if (/payment|deposit|upfront|milestone|invoice/.test(label)) return "paymentTerms";
+  if (/risk|red flag|concern|blocker/.test(label)) return "risks";
+  if (/next|next step|todo|follow/.test(label)) return "nextStep";
+  return "agreedFacts";
+}
+
+function normalizeImportStatus(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_");
+}
+
+function applyImportLabeledValue(parsed, section, value) {
+  if (!value) {
+    return;
+  }
+
+  if (["includedScope", "excludedScope", "risks", "agreedFacts"].includes(section)) {
+    appendImportSectionValue(parsed, section, value);
+    return;
+  }
+
+  parsed[section] = value;
+}
+
+function appendImportSectionValue(parsed, section, value) {
+  if (["includedScope", "excludedScope", "risks", "agreedFacts"].includes(section)) {
+    parsed[section] = mergeFacts(parsed[section], splitInlineList(value));
+    return;
+  }
+
+  parsed[section] = parsed[section] || value;
+}
+
+function splitInlineList(value) {
+  return normalizeStringList(String(value || "").split(/\s*(?:,|;|\|)\s*/));
+}
+
+function applyImportFreeformLine(parsed, value) {
+  const classified = classifyProjectFact(value);
+
+  if (!classified.reviewWorthy) {
+    parsed.agreedFacts = mergeFacts(parsed.agreedFacts, [value]);
+    return;
+  }
+
+  if (Array.isArray(classified.value)) {
+    parsed[classified.field] = mergeFacts(parsed[classified.field], classified.value);
+    return;
+  }
+
+  parsed[classified.field] = parsed[classified.field] || classified.value;
+}
+
+function hasImportProjectContext(parsed) {
+  return Boolean(
+    elements.importProjectTitle.value.trim() ||
+      parsed.projectTitle ||
+      parsed.budget ||
+      parsed.timeline ||
+      parsed.paymentTerms ||
+      parsed.nextStep ||
+      parsed.includedScope.length ||
+      parsed.excludedScope.length ||
+      parsed.risks.length ||
+      parsed.agreedFacts.length
+  );
+}
+
+function setImportStatus(message, isError) {
+  elements.importStatus.textContent = message;
+  elements.importStatus.classList.toggle("error", Boolean(isError));
+}
+
+function formatRelativeTime(value) {
+  const time = Date.parse(value || "");
+
+  if (!time) {
+    return "unknown";
+  }
+
+  const diffMs = Date.now() - time;
+  const minutes = Math.max(0, Math.round(diffMs / 60000));
+
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+
+  const hours = Math.round(minutes / 60);
+
+  if (hours < 48) return `${hours}h ago`;
+
+  return new Date(time).toLocaleDateString();
 }
 
 async function upsertClientMemory(pageContext) {
@@ -2366,6 +3768,10 @@ function updateReplyActions() {
   elements.copyButton.disabled = !hasReply;
   elements.insertButton.disabled = !hasReply || pendingCount > 0;
 
+  if (elements.replyEmpty) {
+    elements.replyEmpty.hidden = hasReply;
+  }
+
   if (!elements.insertHint) {
     return;
   }
@@ -2414,6 +3820,30 @@ function getReplyReadyStatus(memoryResult, warnings = []) {
   return `Reply ready.${warningText}`;
 }
 
+function updateInputEmptyState() {
+  if (!elements.pageHint) {
+    return;
+  }
+
+  const hasText = Boolean(elements.inputText?.value.trim());
+
+  if (!hasText) {
+    setPageHint("Highlight a client message or click Use page.", true);
+    return;
+  }
+
+  if (!currentPageContext && elements.pageHint.classList.contains("empty-state")) {
+    setPageHint("Client message ready.", false);
+  }
+}
+
+function setPageHint(message, isEmpty) {
+  elements.pageHint.textContent = message;
+  elements.pageHint.classList.toggle("empty-state", Boolean(isEmpty));
+  elements.pageHint.classList.toggle("compact-state", Boolean(isEmpty));
+  elements.pageHint.classList.toggle("hint", !isEmpty);
+}
+
 function setStatus(message, isError) {
   elements.statusText.textContent = message;
   elements.statusText.classList.toggle("error", Boolean(isError));
@@ -2458,20 +3888,240 @@ function buildApiEndpoint(base, route) {
   return `${base.replace(/\/+$/, "")}/api/${route}`;
 }
 
-function readableError(error) {
-  const message = error instanceof Error ? error.message : "Something went wrong.";
+function readableError(error, context = "") {
+  return toUserError(error, context).message;
+}
 
-  if (message.includes("Cannot access")) {
-    return "Chrome blocked this page. Try a normal website tab.";
+function toUserError(error, context = "") {
+  const rawMessage = error instanceof Error ? error.message : typeof error === "string" ? error : "Something went wrong.";
+  const lower = rawMessage.toLowerCase();
+  const ctx = String(context || "").toLowerCase();
+
+  if (rawMessage) {
+    console.warn(`[FM] ${context || "error"}:`, rawMessage);
   }
 
-  if (message.includes("Receiving end does not exist")) {
-    return "Refresh the page so the extension can inject its content script.";
+  if (lower.includes("unsupported page") || lower.includes("cannot access") || lower.includes("chrome://") || lower.includes("chrome-extension://")) {
+    return { message: "Open a normal website tab to use Freelancer Memory here.", category: "unsupported_page" };
   }
 
-  if (message.includes("Failed to fetch")) {
-    return "Could not reach the Freelancer Memory API. Check the endpoint and try again.";
+  if (
+    lower.includes("receiving end does not exist") ||
+    lower.includes("content script") ||
+    lower.includes("message port closed") ||
+    lower.includes("could not establish connection")
+  ) {
+    return { message: "Refresh this page so Freelancer Memory can connect.", category: "content_script_missing" };
   }
 
-  return message;
+  if (lower.includes("no useful page context") || lower.includes("no client message")) {
+    return { message: "No client message found. Highlight a client message or click Use page.", category: "no_message" };
+  }
+
+  if (lower.includes("no active tab")) {
+    return { message: "No active page found. Open the client conversation tab and try again.", category: "no_active_tab" };
+  }
+
+  if (lower.includes("timeout") || lower.includes("timed out") || lower.includes("aborted")) {
+    return { message: "The reply took too long. Check your connection and try again.", category: "timeout" };
+  }
+
+  if (lower.includes("failed to fetch") || lower.includes("network") || lower.includes("service unavailable")) {
+    return { message: "Couldn’t reach the reply service. Check your connection and try again.", category: "api_unavailable" };
+  }
+
+  if (lower.includes("unauthorized") || lower.includes("forbidden")) {
+    return { message: "The API rejected this request. Check the API settings.", category: "api_rejected" };
+  }
+
+  if (lower.includes("daily free limit") || lower.includes("rate_limited") || lower.includes("rate limit")) {
+    return {
+      message: "You’ve used today’s 35 free generations. Add your OpenAI key in Advanced for unlimited.",
+      category: "rate_limited"
+    };
+  }
+
+  if (lower.includes("openai returned") || lower.includes("invalid json") || lower.includes("unexpected shape")) {
+    return { message: "The reply service returned a malformed response. Try again in a minute.", category: "malformed_response" };
+  }
+
+  if (lower.includes("generation failed") || lower.includes("internal server error") || lower.includes("openai request failed")) {
+    return { message: "Couldn’t generate a reply. Check your connection and try again.", category: "generation_failed" };
+  }
+
+  if (lower.includes("no editable reply box") || lower.includes("could not insert") || ctx === "insert" || lower.includes("insert")) {
+    return { message: "Insert failed. Click into the reply box on the page, then try Insert again.", category: "insert_failed" };
+  }
+
+  if (ctx === "copy" || lower.includes("clipboard") || lower.includes("write text")) {
+    return { message: "Couldn’t copy. Select the reply and use Cmd+C.", category: "copy_failed" };
+  }
+
+  if (lower.includes("storage")) {
+    return { message: "Couldn’t save to local storage. Restart Chrome and try again.", category: "storage_failed" };
+  }
+
+  if (lower.includes("empty") || lower.includes("missing client message")) {
+    return { message: "Add or highlight a client message first.", category: "empty_input" };
+  }
+
+  return { message: rawMessage, category: "unknown" };
+}
+
+async function trackEvent(name, payload = {}) {
+  try {
+    if (!name) {
+      return;
+    }
+
+    const safePayload = {};
+
+    for (const [key, value] of Object.entries(payload)) {
+      if (value === null || value === undefined) {
+        continue;
+      }
+      if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+        safePayload[key] = value;
+      }
+    }
+
+    const event = {
+      name,
+      createdAt: new Date().toISOString(),
+      installId: installId || "",
+      ...safePayload
+    };
+
+    const stored = await chrome.storage.local.get(storageKeys.diagnostics);
+    const list = Array.isArray(stored[storageKeys.diagnostics]) ? stored[storageKeys.diagnostics] : [];
+    list.push(event);
+
+    while (list.length > diagnosticsLimit) {
+      list.shift();
+    }
+
+    await chrome.storage.local.set({ [storageKeys.diagnostics]: list });
+  } catch (storageError) {
+    console.warn("[FM] trackEvent failed:", storageError?.message || storageError);
+  }
+}
+
+function getHostnameSafe(url) {
+  if (!url) {
+    return "";
+  }
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return "";
+  }
+}
+
+async function loadDiagnostics() {
+  try {
+    const stored = await chrome.storage.local.get(storageKeys.diagnostics);
+    const list = Array.isArray(stored[storageKeys.diagnostics]) ? stored[storageKeys.diagnostics] : [];
+    return list;
+  } catch (error) {
+    console.warn("[FM] loadDiagnostics failed:", error?.message || error);
+    return [];
+  }
+}
+
+async function renderDiagnostics() {
+  if (!elements.diagnosticsList || !elements.diagnosticsEmpty) {
+    return;
+  }
+
+  const list = await loadDiagnostics();
+  const recent = list.slice(-10).reverse();
+
+  if (!recent.length) {
+    elements.diagnosticsList.replaceChildren();
+    elements.diagnosticsEmpty.hidden = false;
+    return;
+  }
+
+  elements.diagnosticsEmpty.hidden = true;
+  elements.diagnosticsList.replaceChildren(
+    ...recent.map((event) => {
+      const card = document.createElement("div");
+      card.className = "memory-list-item";
+
+      const title = document.createElement("strong");
+      title.textContent = event.name || "event";
+
+      const meta = document.createElement("p");
+      meta.className = "hint";
+      const parts = [];
+      if (event.createdAt) {
+        parts.push(new Date(event.createdAt).toLocaleTimeString());
+      }
+      if (event.status) {
+        parts.push(`status=${event.status}`);
+      }
+      if (event.durationMs) {
+        parts.push(`${event.durationMs}ms`);
+      }
+      if (event.errorCategory) {
+        parts.push(event.errorCategory);
+      }
+      if (event.source) {
+        parts.push(event.source);
+      }
+      meta.textContent = parts.join(" · ") || "no metadata";
+
+      card.append(title, meta);
+      return card;
+    })
+  );
+}
+
+async function copyDiagnostics() {
+  const list = await loadDiagnostics();
+  const payload = list.map(sanitizeDiagnosticEvent);
+  const text = JSON.stringify(payload, null, 2);
+
+  try {
+    await navigator.clipboard.writeText(text);
+    setStatus("Diagnostics copied.", false);
+  } catch (error) {
+    const userError = toUserError(error, "copy");
+    setStatus(userError.message, true);
+  }
+}
+
+async function clearDiagnostics() {
+  await chrome.storage.local.set({ [storageKeys.diagnostics]: [] });
+  await renderDiagnostics();
+  setStatus("Diagnostics cleared.", false);
+}
+
+function sanitizeDiagnosticEvent(event) {
+  const allowedKeys = [
+    "name",
+    "createdAt",
+    "installId",
+    "source",
+    "durationMs",
+    "status",
+    "errorCategory",
+    "forcedIntent",
+    "detectedIntent",
+    "riskLevel",
+    "inputChars",
+    "outputChars",
+    "memoryScore",
+    "field",
+    "target",
+    "bulk",
+    "count"
+  ];
+  const safe = {};
+  for (const key of allowedKeys) {
+    if (event[key] !== undefined && event[key] !== null) {
+      safe[key] = event[key];
+    }
+  }
+  return safe;
 }

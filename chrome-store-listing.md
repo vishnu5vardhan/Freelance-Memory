@@ -59,7 +59,7 @@ No. Users may voluntarily save pricing or payment terms as local business memory
 
 ### Does the extension collect authentication information?
 
-No. The extension may store a shared beta key locally if required for beta access. It does not collect account passwords or OAuth tokens.
+No. The extension does not collect account passwords or OAuth tokens.
 
 ### Does the extension collect personal communications?
 
@@ -109,7 +109,7 @@ Used to show the Freelancer Memory side panel where users save memory, generate 
 
 ### storage
 
-Used to store business memory, client/project notes, draft text, endpoint settings, beta key, install id, and recent generation state locally in Chrome storage.
+Used to store business memory, client/project notes, draft text, endpoint settings, install id, and recent generation state locally in Chrome storage.
 
 ## Host Permissions Justification
 

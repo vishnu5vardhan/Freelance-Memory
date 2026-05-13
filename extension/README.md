@@ -74,8 +74,6 @@ http://localhost:3001/api/generate
 
 For a deployed beta, change the endpoint in the side panel and add the deployed host to `manifest.json` under `host_permissions` and `content_security_policy.connect-src`.
 
-If `BETA_API_KEY` is set on the backend, testers must paste the shared beta key into the side panel before generating.
-
 ## Publishing Note
 
 This MVP is good for `Load unpacked` testing and an unlisted beta after adding:

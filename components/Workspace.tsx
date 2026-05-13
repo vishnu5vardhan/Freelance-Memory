@@ -14,21 +14,22 @@ import {
   type Usage
 } from "@/lib/memory";
 import {
-  loadBetaKey,
+  clearContext,
+  clearDraft,
+  clearHistory,
+  clearWorkspaceMemory,
   loadContext,
   loadDraft,
   loadHistory,
   loadInstallId,
-  saveBetaKey,
   saveContext,
   saveDraft,
   saveHistory
 } from "@/lib/storage";
 
 export function Workspace() {
-  const [context, setContext] = useState<FreelancerContext>(emptyFreelancerContext);
+  const [context, setContext] = useState<FreelancerContext>({ ...emptyFreelancerContext });
   const [inputText, setInputText] = useState("");
-  const [betaKey, setBetaKey] = useState("");
   const [installId, setInstallId] = useState("");
   const [userInstruction, setUserInstruction] = useState("");
   const [forcedIntent, setForcedIntent] = useState<OutputType>("auto");
@@ -37,11 +38,11 @@ export function Workspace() {
   const [history, setHistory] = useState<Generation[]>([]);
   const [status, setStatus] = useState<"idle" | "generating" | "saved" | "error">("idle");
   const [error, setError] = useState("");
+  const [pendingReset, setPendingReset] = useState<"business" | "conversation" | "all" | null>(null);
 
   useEffect(() => {
     setContext(loadContext());
     setInputText(loadDraft());
-    setBetaKey(loadBetaKey());
     setInstallId(loadInstallId());
     setHistory(loadHistory().filter((item) => "result" in item));
   }, []);
@@ -62,9 +63,51 @@ export function Workspace() {
     saveDraft(value);
   }
 
-  function updateBetaKey(value: string) {
-    setBetaKey(value);
-    saveBetaKey(value);
+  function resetBusinessMemory() {
+    if (pendingReset !== "business") {
+      setPendingReset("business");
+      return;
+    }
+
+    setContext({ ...emptyFreelancerContext });
+    clearContext();
+    setPendingReset(null);
+    setStatus("saved");
+    window.setTimeout(() => setStatus("idle"), 1200);
+  }
+
+  function resetConversationMemory() {
+    if (pendingReset !== "conversation") {
+      setPendingReset("conversation");
+      return;
+    }
+
+    setInputText("");
+    setResult(null);
+    setUsage(null);
+    setHistory([]);
+    clearDraft();
+    clearHistory();
+    setPendingReset(null);
+    setStatus("saved");
+    window.setTimeout(() => setStatus("idle"), 1200);
+  }
+
+  function resetAllLocalMemory() {
+    if (pendingReset !== "all") {
+      setPendingReset("all");
+      return;
+    }
+
+    setContext({ ...emptyFreelancerContext });
+    setInputText("");
+    setResult(null);
+    setUsage(null);
+    setHistory([]);
+    clearWorkspaceMemory();
+    setPendingReset(null);
+    setStatus("saved");
+    window.setTimeout(() => setStatus("idle"), 1200);
   }
 
   async function generate() {
@@ -75,10 +118,6 @@ export function Workspace() {
       const headers: Record<string, string> = {
         "Content-Type": "application/json"
       };
-
-      if (betaKey.trim()) {
-        headers["x-fm-beta-key"] = betaKey.trim();
-      }
 
       if (installId) {
         headers["x-fm-install-id"] = installId;
@@ -183,6 +222,13 @@ export function Workspace() {
             <p className="border-2 border-ink bg-paper px-3 py-3 text-xs font-bold leading-5 text-gray-700">
               Stored in this browser. Sent to the server only when you click generate. Your API key stays server-side.
             </p>
+            <button
+              type="button"
+              onClick={resetBusinessMemory}
+              className="focus-block rounded-md border-2 border-ink bg-paper px-4 py-2 text-sm font-black text-ink transition hover:-translate-y-0.5"
+            >
+              {pendingReset === "business" ? "Confirm reset business" : "Reset business memory"}
+            </button>
           </div>
         </section>
 
@@ -226,17 +272,6 @@ export function Workspace() {
                 />
               </label>
             </div>
-
-            <label className="mt-4 block">
-              <span className="text-sm font-black text-ink">Beta key</span>
-              <input
-                value={betaKey}
-                onChange={(event) => updateBetaKey(event.target.value)}
-                placeholder="Shared beta password"
-                type="password"
-                className="focus-block mt-2 min-h-12 w-full rounded-md border-2 border-ink bg-[#fffdf8] px-3 py-2 text-sm font-bold text-ink placeholder:text-gray-400"
-              />
-            </label>
 
             <div className="mt-4 border-2 border-ink bg-paper p-3 text-xs font-bold leading-5 text-gray-700">
               Auto is the default. Use override only when AI guesses the wrong situation.
@@ -333,7 +368,17 @@ export function Workspace() {
             ) : null}
 
             <div className="mt-6">
-              <h2 className="text-sm font-black uppercase text-gray-600">History</h2>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h2 className="text-sm font-black uppercase text-gray-600">History</h2>
+                <button
+                  type="button"
+                  onClick={resetConversationMemory}
+                  disabled={!inputText && !result && history.length === 0}
+                  className="focus-block rounded-md border-2 border-ink bg-paper px-3 py-1.5 text-xs font-black text-ink transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {pendingReset === "conversation" ? "Confirm reset conversation" : "Reset conversation"}
+                </button>
+              </div>
               <div className="mt-3 grid max-h-80 gap-3 overflow-y-auto">
                 {history.length ? (
                   history.map((item) => (
@@ -363,6 +408,14 @@ export function Workspace() {
                 )}
               </div>
             </div>
+            <button
+              type="button"
+              onClick={resetAllLocalMemory}
+              disabled={score.completed === 0 && !inputText && !result && history.length === 0}
+              className="focus-block mt-5 w-full rounded-md border-2 border-red-900 bg-red-50 px-4 py-2 text-sm font-black text-red-900 transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {pendingReset === "all" ? "Confirm reset all" : "Reset all local memory"}
+            </button>
           </div>
         </section>
       </div>

@@ -6,6 +6,139 @@ The question is simple:
 
 > Does the output help a freelancer move a client forward without rewriting their business every time?
 
+## User-level QA Checklist (Phase 3)
+
+Run this before every public release. Tick each item on a real Chrome profile, not just dev.
+
+### Install flow
+
+- [ ] Fresh install opens `onboarding.html` in a new tab automatically.
+- [ ] Filling memory fields and clicking Save shows the "Memory saved." next step.
+- [ ] Reloading the extension after onboarding does NOT reopen onboarding.
+- [ ] Side panel reflects memory saved during onboarding (score > 0%).
+- [ ] `freelancer_memory_extension_install_id` exists in `chrome.storage.local`.
+
+### Sidebar
+
+- [ ] Side panel opens by clicking the toolbar icon.
+- [ ] Side panel opens from the in-page Freelancer Memory button.
+- [ ] Reply tab is the default tab on open.
+- [ ] With no input, status reads "Add or highlight a client message first." (or weak-memory hint if memory is < 40%).
+- [ ] With weak memory (< 40% strength), the status hint mentions adding services, pricing, and voice.
+- [ ] Generate with valid input shows "Writing reply..." then a real reply.
+- [ ] Generate while a previous generation is in flight is ignored (no duplicate request).
+- [ ] Generate failure shows a single friendly status message, never raw error text.
+- [ ] Copy success shows "Copied.".
+- [ ] Copy failure shows "Couldn’t copy. Select the reply and use Cmd+C.".
+- [ ] Insert success shows "Inserted. Review before sending.".
+- [ ] Insert failure shows "Insert failed. Click into the reply box on the page, then try Insert again.".
+
+### Platforms
+
+Verify generate / use page / use highlight / insert work on each:
+
+- [ ] Gmail (`mail.google.com`)
+- [ ] LinkedIn messages / inMail
+- [ ] Upwork inbox
+- [ ] Fiverr inbox
+- [ ] WhatsApp Web (`web.whatsapp.com`)
+- [ ] X / Twitter DMs
+- [ ] Generic site (e.g. a Notion shared page or a contact form)
+
+### Failure cases
+
+- [ ] Offline (turn wifi off): status shows "Couldn’t reach the reply service. Check your connection and try again.".
+- [ ] Unsupported page (`chrome://extensions`): status shows "Open a normal website tab to use Freelancer Memory here.".
+- [ ] Page loaded BEFORE extension reload (content script not injected): "Refresh this page so Freelancer Memory can connect.".
+- [ ] No highlighted text + Use highlight click: status shows "No highlighted text found. Paste the client message here.".
+- [ ] No reply box detected + Insert click: shows the insert-failure friendly message.
+- [ ] Long client message (>5000 chars): generates without truncation; UI does not freeze.
+- [ ] Weird characters / emojis in input: reply renders correctly, no JSON parse errors.
+- [ ] Private / incognito Chrome: extension only works if explicitly allowed in `chrome://extensions`. Document this in the Chrome store listing.
+
+### Rate limit & BYO key
+
+- [ ] Successful generation 1-35 succeeds normally with shared key.
+- [ ] After 35 successful generations on the same `install_id` in one UTC day, server returns 429 and extension shows "You've used today's 35 free generations. Add your OpenAI key in Advanced for unlimited.".
+- [ ] Pasting a valid `sk-...` key in Advanced > Your OpenAI key bypasses the cap.
+- [ ] An invalid value (e.g. `not-a-key`) is silently ignored — the header is not sent.
+- [ ] After UTC midnight, the counter resets (verify by checking `fm_generation_events` count for that install_id).
+- [ ] With `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` unset in the API env, the cap fails open (no 429s, no logging). Useful sanity check for local dev.
+
+### Performance
+
+- [ ] Typical generation finishes in < 5s on a normal connection.
+- [ ] Generations >= 6s append "This took Xs. If it keeps happening, try again later." to the status.
+- [ ] Generate button is disabled while a request is in flight.
+- [ ] Double-clicking Generate does not fire two requests.
+- [ ] Request times out cleanly after ~45s; user sees the timeout message, not a hang.
+
+### Privacy
+
+- [ ] `freelancer_memory_extension_diagnostics` never contains the client message text.
+- [ ] Diagnostics never contains generated reply text.
+- [ ] Diagnostics never contains full page URLs (only source / hostname).
+- [ ] Local memory stays in `chrome.storage.local` (verify on `chrome://extensions` > inspect side panel > Application > Storage).
+- [ ] The extension never auto-sends a reply. Insert pastes into the reply box only; the user must click send themselves.
+
+### Diagnostics panel (Advanced > Diagnostics)
+
+- [ ] Last 10 safe events visible after a couple of generations.
+- [ ] "Copy diagnostics" copies a JSON array; pasted output contains no client text or reply text.
+- [ ] "Clear diagnostics" empties the list and shows the empty state.
+- [ ] Events captured include at minimum: `extension_opened`, `generate_clicked`, `generation_succeeded` or `generation_failed`, `copy_clicked`, `insert_clicked`, `memory_saved`, `pending_memory_accepted` / `rejected`.
+
+## Manual test notes
+
+### Loading the extension
+
+1. Open `chrome://extensions`.
+2. Enable Developer mode.
+3. Click "Load unpacked" and select `freelancer memory/extension/`.
+4. Confirm the icon appears in the toolbar and side panel mode is allowed.
+
+### Reloading after edits
+
+- After every change in `extension/`, click the refresh icon on the extension card in `chrome://extensions`.
+- Then refresh ANY tab you intend to test on (so the updated `content.js` injects).
+
+### Opening the side panel
+
+- Click the toolbar icon, or
+- Click the Freelancer Memory floating button injected into a supported page.
+
+### Inspecting the service worker
+
+- `chrome://extensions` > "Service worker" link under Freelancer Memory > opens DevTools for `background.js`.
+- Console logs prefixed with `[FM]` come from `toUserError` / `trackEvent`.
+
+### Inspecting chrome.storage.local
+
+- Right-click inside the side panel > Inspect.
+- DevTools > Application > Storage > Extension Storage > Local.
+- Useful keys to scan during QA: `freelancer_memory_extension_context`, `freelancer_memory_extension_diagnostics`, `freelancer_memory_extension_install_id`, `freelancer_memory_pending_updates`.
+
+### Verifying diagnostics events
+
+1. Open the side panel (this fires `extension_opened`).
+2. Generate a reply (fires `generate_clicked` and one of `generation_succeeded` / `generation_failed`).
+3. Open Advanced > Diagnostics. Expand the section. The list should show the events in reverse chronological order.
+4. Click "Copy diagnostics", paste into a scratchpad, and confirm no message or reply text is present.
+
+### Automated tests
+
+There is no Vitest / Playwright harness in this repo today. Adding one is out of scope for Phase 3; manual QA above is the contract.
+
+Backend API correctness is exercised by:
+
+```bash
+npm run lint
+npm run typecheck
+npm run build
+```
+
+Run these before shipping. They will not catch UX regressions in the extension.
+
 ## How To Test
 
 1. Open `http://localhost:3000/workspace`.

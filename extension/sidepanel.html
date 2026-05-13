@@ -8,137 +8,332 @@
   </head>
   <body>
     <main class="shell">
-      <header class="hero">
-        <p class="eyebrow">Freelancer Memory</p>
-        <h1>Reply without tab hopping.</h1>
-        <div class="score">
-          <div>
-            <span>Memory</span>
-            <strong id="scoreText">0%</strong>
-          </div>
-          <div class="meter" aria-hidden="true">
-            <span id="scoreBar"></span>
-          </div>
-        </div>
-      </header>
+      <nav class="top-tabs" role="tablist" aria-label="Freelancer Memory sections">
+        <button id="replyTopTab" class="top-tab active" type="button" role="tab" aria-selected="true" aria-controls="replyTabPanel">
+          Reply
+        </button>
+        <button id="memoryTopTab" class="top-tab" type="button" role="tab" aria-selected="false" aria-controls="memoryTabPanel">
+          Memory
+        </button>
+        <button id="advancedTopTab" class="top-tab" type="button" role="tab" aria-selected="false" aria-controls="advancedTabPanel">
+          Advanced
+        </button>
+      </nav>
 
-      <section class="panel">
-        <div class="panel-title">
+      <section id="replyTabPanel" class="top-panel active" role="tabpanel" aria-labelledby="replyTopTab">
+        <header class="hero">
           <div>
-            <p class="eyebrow">Step 1</p>
-            <h2>Client message</h2>
+            <p class="eyebrow">Freelancer Memory</p>
+            <h1>Reply faster.</h1>
           </div>
-          <div class="button-row compact">
+          <div class="score" aria-label="Memory strength">
+            <div>
+              <span>Memory strength</span>
+              <strong id="scoreText">0%</strong>
+            </div>
+            <div class="meter" aria-hidden="true">
+              <span id="scoreBar"></span>
+            </div>
+          </div>
+        </header>
+
+        <section id="onboardingNotice" class="panel onboarding-notice" hidden>
+          <div>
+            <p class="eyebrow">Setup</p>
+            <h2>Set up memory first for better replies.</h2>
+            <p class="hint">Takes 2 minutes. You can still generate without it.</p>
+          </div>
+          <button id="openOnboardingButton" class="button secondary" type="button">Set up memory</button>
+        </section>
+
+        <section class="panel">
+          <div class="panel-title">
+            <div>
+              <p class="eyebrow">Client message</p>
+              <h2>What did they say?</h2>
+            </div>
+          </div>
+          <label class="field">
+            <span>Message</span>
+            <textarea
+              id="inputText"
+              rows="7"
+              placeholder="Highlight a client message or click Use page."
+            ></textarea>
+          </label>
+          <div class="button-stack">
             <button id="grabPageButton" class="button secondary" type="button">Use page</button>
             <button id="grabSelectionButton" class="button secondary" type="button">Use highlight</button>
           </div>
-        </div>
-        <label class="field">
-          <span>Selected text or pasted message</span>
-          <textarea
-            id="inputText"
-            rows="7"
-            placeholder="Highlight a client message on the page, then click Use highlight."
-          ></textarea>
-        </label>
-        <p id="pageHint" class="hint">Click the FM button near a reply box, or highlight the exact client message.</p>
-        <p id="sessionHint" class="hint"></p>
-        <p id="projectHint" class="hint"></p>
-      </section>
+          <p id="pageHint" class="empty-state compact-state">Highlight a client message or click Use page.</p>
+          <p id="sessionHint" class="hint hidden-hint" hidden></p>
+          <p id="projectHint" class="hint hidden-hint" hidden></p>
+        </section>
 
-      <section class="panel">
-        <div class="panel-title">
-          <div>
-            <p class="eyebrow">Step 2</p>
-            <h2>Reply setup</h2>
+        <section class="panel">
+          <div class="panel-title">
+            <div>
+              <p class="eyebrow">Reply setup</p>
+              <h2>Tone and intent</h2>
+            </div>
           </div>
-        </div>
-        <div class="grid two">
           <label class="field">
             <span>Reply mode</span>
             <select id="forcedIntent"></select>
           </label>
           <label class="field">
-            <span>API endpoint</span>
-            <input id="apiEndpoint" type="url" spellcheck="false" />
+            <span>Extra instruction</span>
+            <input id="userInstruction" type="text" placeholder="Shorter, firmer, warmer..." />
           </label>
-        </div>
-        <label class="field">
-          <span>Beta key</span>
-          <input id="betaKey" type="password" spellcheck="false" placeholder="Shared beta password" />
-        </label>
-        <label class="field">
-          <span>Extra instruction</span>
-          <input id="userInstruction" type="text" placeholder="Shorter, firmer, warmer..." />
-        </label>
-        <button id="generateButton" class="button primary" type="button">Generate reply</button>
-        <p id="statusText" class="hint" role="status">Paste the beta key, then generate.</p>
-      </section>
+          <button id="generateButton" class="button primary" type="button">Generate reply</button>
+          <p id="statusText" class="hint" role="status" aria-live="polite">Ready when you add a client message.</p>
+        </section>
 
-      <section class="panel">
-        <div class="panel-title">
-          <div>
-            <p class="eyebrow">Step 3</p>
-            <h2>Reply</h2>
+        <section class="panel">
+          <div class="panel-title">
+            <div>
+              <p class="eyebrow">Generated reply</p>
+              <h2>Review before sending</h2>
+            </div>
           </div>
-          <div class="button-row compact">
-            <button id="insertButton" class="button secondary" type="button" disabled>Insert</button>
+          <div class="badges">
+            <span id="intentBadge">waiting</span>
+            <span id="confidenceBadge">auto</span>
+          </div>
+          <div id="riskBox" class="risk-box" hidden>
+            <strong id="riskTitle">Risk</strong>
+            <p id="riskReason"></p>
+          </div>
+          <div id="analysisBox" class="analysis-box" hidden></div>
+          <textarea id="replyOutput" rows="8" readonly placeholder="Generate a reply first."></textarea>
+          <p id="replyEmpty" class="empty-state compact-state">Generate a reply first.</p>
+          <div class="button-stack after-reply">
             <button id="copyButton" class="button secondary" type="button" disabled>Copy</button>
+            <button id="insertButton" class="button secondary" type="button" disabled>Insert</button>
           </div>
-        </div>
-        <div class="badges">
-          <span id="intentBadge">waiting</span>
-          <span id="confidenceBadge">auto</span>
-        </div>
-        <div id="riskBox" class="risk-box" hidden>
-          <strong id="riskTitle">Risk</strong>
-          <p id="riskReason"></p>
-        </div>
-        <div id="analysisBox" class="analysis-box" hidden></div>
-        <textarea id="replyOutput" rows="8" readonly placeholder="Generated reply appears here."></textarea>
-        <p id="insertHint" class="hint">Generate first. Then review and insert.</p>
-        <div id="replyMeta" class="meta" hidden></div>
+          <p id="insertHint" class="hint">Generate first. Then review and insert.</p>
+          <details class="reply-details">
+            <summary><strong>Reply details</strong><span>Intent, risk, missing info, and usage.</span></summary>
+            <div id="replyMeta" class="meta" hidden></div>
+          </details>
+        </section>
+
+        <section class="panel">
+          <div class="panel-title">
+            <div>
+              <p class="eyebrow">Active memory</p>
+              <h2>What this reply uses</h2>
+            </div>
+          </div>
+          <div id="memorySnapshot" class="memory-snapshot"></div>
+        </section>
       </section>
 
-      <section class="panel">
-        <div class="panel-title">
-          <div>
-            <p class="eyebrow">Step 4</p>
-            <h2>Memory review</h2>
+      <section id="memoryTabPanel" class="top-panel" role="tabpanel" aria-labelledby="memoryTopTab" hidden>
+        <section class="panel">
+          <div class="panel-title">
+            <div>
+              <p class="eyebrow">Memory</p>
+              <h2>Saved context</h2>
+            </div>
           </div>
-          <div class="button-row compact">
-            <button id="acceptAllMemoryButton" class="button secondary" type="button" disabled>Accept all</button>
-            <button id="rejectAllMemoryButton" class="button secondary" type="button" disabled>Reject all</button>
+          <div class="grid two context-picker">
+            <label class="field">
+              <span>Active client</span>
+              <select id="activeClientSelect"></select>
+            </label>
+            <label class="field">
+              <span>Active project</span>
+              <select id="activeProjectSelect"></select>
+            </label>
           </div>
-        </div>
-        <p class="hint">Budget, timeline, payment terms, scope, and risks need your OK before saving.</p>
-        <div id="pendingReviewList" class="pending-list"></div>
-        <p id="memoryReviewEmpty" class="empty-state">No pending memory updates.</p>
-      </section>
-
-      <section class="panel">
-        <div class="panel-title">
-          <div>
-            <p class="eyebrow">Step 5</p>
-            <h2>Saved info</h2>
-          </div>
-          <div class="tabs" role="tablist" aria-label="Saved info">
-            <button id="memoryTab" class="tab active" type="button" role="tab" aria-selected="true">Memory</button>
+          <div class="tabs memory-shortcuts" role="tablist" aria-label="Memory groups">
+            <button id="memoryTab" class="tab active" type="button" role="tab" aria-selected="true">Business</button>
+            <button id="clientTab" class="tab" type="button" role="tab" aria-selected="false">Client</button>
             <button id="projectTab" class="tab" type="button" role="tab" aria-selected="false">Project</button>
             <button id="socialsTab" class="tab" type="button" role="tab" aria-selected="false">Socials</button>
           </div>
-        </div>
-        <div id="memorySnapshot" class="memory-snapshot"></div>
-        <div id="memoryPanel" class="tab-panel">
-          <div id="memoryFields" class="memory-fields"></div>
-        </div>
-        <div id="projectPanel" class="tab-panel" hidden>
-          <div id="projectFields" class="memory-fields"></div>
-        </div>
-        <div id="socialsPanel" class="tab-panel" hidden>
-          <div id="socialFields" class="memory-fields"></div>
-        </div>
-        <p class="hint">Saved in Chrome storage on this browser.</p>
+        </section>
+
+        <details id="businessDetails" class="panel memory-group" open>
+          <summary><strong>Business</strong><span>Services, pricing, proof, terms, and voice.</span></summary>
+          <div id="memoryPanel" class="tab-panel memory-group-body">
+            <p class="hint">Add the facts you want every reply to remember.</p>
+            <div id="memoryFields" class="memory-fields"></div>
+          </div>
+        </details>
+
+        <details id="clientDetails" class="panel memory-group">
+          <summary><strong>Client</strong><span>Name, company, source, status, and notes.</span></summary>
+          <div id="clientPanel" class="tab-panel memory-group-body">
+            <div id="clientFields" class="memory-fields"></div>
+          </div>
+        </details>
+
+        <details id="projectDetails" class="panel memory-group">
+          <summary><strong>Project</strong><span>Scope, budget, timeline, terms, risks, and next step.</span></summary>
+          <div id="projectPanel" class="tab-panel memory-group-body">
+            <div id="projectFields" class="memory-fields"></div>
+          </div>
+        </details>
+
+        <details id="socialsDetails" class="panel memory-group">
+          <summary><strong>Socials</strong><span>Links and contact details you can reuse in replies.</span></summary>
+          <div id="socialsPanel" class="tab-panel memory-group-body">
+            <div id="socialFields" class="memory-fields"></div>
+          </div>
+        </details>
+
+        <details id="pendingMemoryDetails" class="panel memory-group" open>
+          <summary><strong>Pending updates</strong><span>Review money, scope, timeline, payment, and risk before saving.</span></summary>
+          <div class="memory-group-body">
+            <div class="button-stack review-actions">
+              <button id="acceptAllMemoryButton" class="button secondary" type="button" disabled>Accept all</button>
+              <button id="rejectAllMemoryButton" class="button secondary" type="button" disabled>Reject all</button>
+            </div>
+            <div id="pendingReviewList" class="pending-list"></div>
+            <p id="memoryReviewEmpty" class="empty-state">No pending memory updates.</p>
+          </div>
+        </details>
+      </section>
+
+      <section id="advancedTabPanel" class="top-panel" role="tabpanel" aria-labelledby="advancedTopTab" hidden>
+        <section class="panel advanced-intro">
+          <p class="eyebrow">Advanced</p>
+          <h2>Debug and import tools</h2>
+          <p class="hint">Most users never need this. Use it for API setup, imports, testing, and resets.</p>
+        </section>
+
+        <details class="panel memory-group" open>
+          <summary><strong>API access</strong><span>Endpoint and optional OpenAI key.</span></summary>
+          <div class="memory-group-body">
+            <label class="field">
+              <span>API endpoint</span>
+              <input id="apiEndpoint" type="url" spellcheck="false" />
+            </label>
+            <label class="field">
+              <span>Your OpenAI key (optional)</span>
+              <input id="openaiKey" type="password" spellcheck="false" placeholder="sk-..." autocomplete="off" />
+            </label>
+            <p class="hint">35 free generations per day on the shared key. Paste your own <code>sk-...</code> key for unlimited use. Sent only to call OpenAI; never logged or saved on the server.</p>
+          </div>
+        </details>
+
+        <details id="importDetails" class="panel memory-group">
+          <summary><strong>Import context</strong><span>Bring in existing client or project notes.</span></summary>
+          <div id="importPanel" class="tab-panel memory-group-body">
+            <div class="grid two">
+              <label class="field">
+                <span>Import target</span>
+                <select id="importTarget">
+                  <option value="both">Client + project</option>
+                  <option value="client">Client only</option>
+                  <option value="project">Project only</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Source</span>
+                <select id="importSource">
+                  <option value="generic">Generic</option>
+                  <option value="gmail">Gmail</option>
+                  <option value="linkedin">LinkedIn</option>
+                  <option value="upwork">Upwork</option>
+                  <option value="fiverr">Fiverr</option>
+                  <option value="whatsapp">WhatsApp</option>
+                  <option value="x">X</option>
+                </select>
+              </label>
+            </div>
+            <div class="grid two">
+              <label class="field">
+                <span>Client name</span>
+                <input id="importClientName" type="text" placeholder="Sarah Chen" />
+              </label>
+              <label class="field">
+                <span>Company</span>
+                <input id="importCompany" type="text" placeholder="GlowSkin" />
+              </label>
+            </div>
+            <div class="grid two">
+              <label class="field">
+                <span>Email / handle</span>
+                <input id="importEmailHandle" type="text" placeholder="sarah@example.com or @sarah" />
+              </label>
+              <label class="field">
+                <span>Project title</span>
+                <input id="importProjectTitle" type="text" placeholder="Landing page redesign" />
+              </label>
+            </div>
+            <label class="field">
+              <span>Upload .txt, .md, or .json</span>
+              <input id="importFile" type="file" accept=".txt,.md,.json,text/plain,application/json,text/markdown" />
+            </label>
+            <label class="field">
+              <span>Existing context</span>
+              <textarea id="importText" rows="8" placeholder="Paste client/project notes. Use lines like Budget:, Timeline:, Included:, Excluded:, Payment terms:, Risks:, Next step:."></textarea>
+            </label>
+            <button id="runImportButton" class="button primary" type="button">Import context</button>
+            <p id="importStatus" class="hint">Import is local and deterministic. No AI call.</p>
+          </div>
+        </details>
+
+        <details class="panel memory-group">
+          <summary><strong>Stored memory tester</strong><span>Inspect clients and projects in Chrome storage.</span></summary>
+          <div class="memory-group-body">
+            <div class="tabs" role="tablist" aria-label="Stored memory tester">
+              <button id="clientsTab" class="tab active" type="button" role="tab" aria-selected="true">Clients</button>
+              <button id="projectsTab" class="tab" type="button" role="tab" aria-selected="false">Projects</button>
+              <button id="sessionTab" class="tab" type="button" role="tab" aria-selected="false">Session</button>
+              <button id="importTab" class="tab" type="button" role="tab" aria-selected="false">Import</button>
+            </div>
+
+            <div id="clientsPanel" class="tab-panel">
+              <p class="hint">Use Memory for normal switching. This list is for testing and cleanup.</p>
+              <div id="clientsList" class="memory-list"></div>
+              <p id="clientsEmpty" class="empty-state">No clients saved yet.</p>
+            </div>
+
+            <div id="projectsPanel" class="tab-panel" hidden>
+              <p class="hint">Use Memory for normal switching. This list is for testing and cleanup.</p>
+              <div id="projectsList" class="memory-list"></div>
+              <p id="projectsEmpty" class="empty-state">No projects saved yet.</p>
+            </div>
+
+            <div id="sessionPanel" class="tab-panel" hidden>
+              <div class="button-stack tester-actions">
+                <button id="refreshSessionButton" class="button secondary" type="button">Refresh session</button>
+                <button id="clearSessionButton" class="button danger" type="button">Clear session</button>
+                <button id="expireSessionButton" class="button danger" type="button">Expire now</button>
+              </div>
+              <p class="hint">Session memory expires after 2 hours. This panel is for testing that timer.</p>
+              <div id="sessionDetails" class="memory-list"></div>
+              <p id="sessionEmpty" class="empty-state">No active session saved yet.</p>
+            </div>
+          </div>
+        </details>
+
+        <details id="diagnosticsDetails" class="panel memory-group">
+          <summary><strong>Diagnostics</strong><span>Recent local events. Safe metadata only.</span></summary>
+          <div class="memory-group-body">
+            <p class="hint">Last 10 events stored on this browser. Used for debugging after launch. Never contains client text or generated replies.</p>
+            <div class="button-stack">
+              <button id="copyDiagnosticsButton" class="button secondary" type="button">Copy diagnostics</button>
+              <button id="clearDiagnosticsButton" class="button secondary" type="button">Clear diagnostics</button>
+            </div>
+            <div id="diagnosticsList" class="memory-list"></div>
+            <p id="diagnosticsEmpty" class="empty-state">No diagnostic events yet.</p>
+          </div>
+        </details>
+
+        <details class="panel memory-group danger-group">
+          <summary><strong>Reset context</strong><span>Destructive storage controls.</span></summary>
+          <div class="reset-zone">
+            <button id="resetClientMemoryButton" class="button danger" type="button">Reset client</button>
+            <button id="resetProjectMemoryButton" class="button danger" type="button">Reset project</button>
+            <button id="resetAllContextButton" class="button danger strong" type="button">Reset all context</button>
+          </div>
+          <p class="hint">Saved in Chrome storage on this browser.</p>
+        </details>
       </section>
     </main>
     <script src="sidepanel.js"></script>

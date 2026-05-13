@@ -2,12 +2,73 @@ import type { GeneratedResult, GenerateRequest, Usage } from "@/lib/memory";
 
 const timeoutMs = 1500;
 
+type GenerationMetrics = {
+  durationMs: number;
+  outputChars: number;
+  status: "ok" | "error";
+  errorCategory?: string;
+};
+
 export async function logGenerationEvent(
   request: Request,
   payload: GenerateRequest,
   result: GeneratedResult,
-  usage: Usage
+  usage: Usage,
+  metrics: GenerationMetrics
 ) {
+  await insertGenerationEvent(request, payload, {
+    forcedIntent: payload.forcedIntent,
+    detectedIntent: result.detectedIntent,
+    riskLevel: result.riskLevel,
+    inputChars: payload.inputText.length,
+    promptChars: usage.promptChars,
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+    totalTokens: usage.totalTokens,
+    durationMs: metrics.durationMs,
+    outputChars: metrics.outputChars,
+    status: metrics.status,
+    errorCategory: metrics.errorCategory
+  });
+}
+
+export async function logGenerationFailure(
+  request: Request,
+  payload: GenerateRequest,
+  metrics: Pick<GenerationMetrics, "durationMs" | "errorCategory">
+) {
+  await insertGenerationEvent(request, payload, {
+    forcedIntent: payload.forcedIntent,
+    detectedIntent: "error",
+    riskLevel: "none",
+    inputChars: payload.inputText.length,
+    promptChars: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    totalTokens: 0,
+    durationMs: metrics.durationMs,
+    outputChars: 0,
+    status: "error",
+    errorCategory: metrics.errorCategory
+  });
+}
+
+type InsertGenerationEvent = {
+  forcedIntent: string;
+  detectedIntent: string;
+  riskLevel: string;
+  inputChars: number;
+  promptChars: number;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  durationMs: number;
+  outputChars: number;
+  status: "ok" | "error";
+  errorCategory?: string;
+};
+
+async function insertGenerationEvent(request: Request, payload: GenerateRequest, event: InsertGenerationEvent) {
   const supabaseUrl = (process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL)?.replace(/\/$/, "");
   const apiKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -30,14 +91,18 @@ export async function logGenerationEvent(
       body: JSON.stringify({
         install_id: cleanHeader(request.headers.get("x-fm-install-id")) || null,
         source: cleanText(payload.contextPacket?.source ?? payload.pageContext?.source ?? "web"),
-        forced_intent: payload.forcedIntent,
-        detected_intent: result.detectedIntent,
-        risk_level: result.riskLevel,
-        input_chars: payload.inputText.length,
-        prompt_chars: usage.promptChars,
-        input_tokens: usage.inputTokens,
-        output_tokens: usage.outputTokens,
-        total_tokens: usage.totalTokens
+        forced_intent: cleanText(event.forcedIntent) || "auto",
+        detected_intent: cleanText(event.detectedIntent) || "error",
+        risk_level: cleanRiskLevel(event.riskLevel),
+        input_chars: Math.max(0, event.inputChars),
+        prompt_chars: Math.max(0, event.promptChars),
+        input_tokens: Math.max(0, event.inputTokens),
+        output_tokens: Math.max(0, event.outputTokens),
+        total_tokens: Math.max(0, event.totalTokens),
+        duration_ms: Math.max(0, Math.round(event.durationMs)),
+        output_chars: Math.max(0, event.outputChars),
+        status: event.status,
+        error_category: event.errorCategory ? cleanText(event.errorCategory).slice(0, 80) : null
       }),
       signal: controller.signal
     });
@@ -54,4 +119,8 @@ function cleanHeader(value: string | null) {
 
 function cleanText(value: string) {
   return value.replace(/[^\w .:@/-]/g, "").trim();
+}
+
+function cleanRiskLevel(value: string) {
+  return ["none", "low", "medium", "high"].includes(value) ? value : "none";
 }

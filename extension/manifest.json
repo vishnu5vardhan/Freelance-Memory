@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Freelancer Memory",
   "description": "Generate client replies from saved freelancer memory without leaving the browser.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "minimum_chrome_version": "114",
   "permissions": ["activeTab", "clipboardWrite", "scripting", "sidePanel", "storage"],
   "host_permissions": ["https://freelancer-memory.vercel.app/*"],

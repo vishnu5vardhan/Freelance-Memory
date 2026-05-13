@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { getChromeWebStoreUrlWithUtm } from "@/lib/chrome-store";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -12,6 +13,8 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const chromeStoreUrl = getChromeWebStoreUrlWithUtm("nav");
+
   return (
     <html lang="en">
       <body className="min-h-screen bg-paper font-sans antialiased">
@@ -28,12 +31,23 @@ export default function RootLayout({
               >
                 Privacy
               </Link>
-              <Link
-                href="/workspace"
-                className="focus-block rounded-md border-2 border-ink bg-ink px-4 py-2 text-sm font-black text-white transition hover:-translate-y-0.5 hover:bg-gray-900"
-              >
-                Open app
-              </Link>
+              {chromeStoreUrl ? (
+                <a
+                  href={chromeStoreUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="focus-block rounded-md border-2 border-ink bg-ink px-4 py-2 text-sm font-black text-white transition hover:-translate-y-0.5 hover:bg-gray-900"
+                >
+                  Add to Chrome
+                </a>
+              ) : (
+                <Link
+                  href="/workspace"
+                  className="focus-block rounded-md border-2 border-ink bg-ink px-4 py-2 text-sm font-black text-white transition hover:-translate-y-0.5 hover:bg-gray-900"
+                >
+                  Try demo
+                </Link>
+              )}
             </nav>
           </div>
         </header>

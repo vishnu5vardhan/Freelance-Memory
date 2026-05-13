@@ -1,7 +1,6 @@
 const selectionStorageKey = "freelancer_memory_extension_last_selection";
 const pageContextStorageKey = "freelancer_memory_extension_page_context";
 const contextStorageKey = "freelancer_memory_extension_context";
-const betaKeyStorageKey = "freelancer_memory_extension_beta_key";
 const endpointStorageKey = "freelancer_memory_extension_api_endpoint";
 const installIdStorageKey = "freelancer_memory_extension_install_id";
 const forcedIntentStorageKey = "freelancer_memory_extension_forced_intent";
@@ -1238,7 +1237,6 @@ async function generateInlineReply(pageContext) {
   try {
     const stored = await chrome.storage.local.get([
       contextStorageKey,
-      betaKeyStorageKey,
       endpointStorageKey,
       installIdStorageKey,
       forcedIntentStorageKey,
@@ -1270,9 +1268,8 @@ async function generateInlineReply(pageContext) {
       userInstruction: contextPacket.userInstruction
     };
     const endpoint = normalizeEndpoint(stored[endpointStorageKey] || defaultApiEndpoint);
-    const betaKey = String(stored[betaKeyStorageKey] || "").trim();
     const installId = String(stored[installIdStorageKey] || "").trim();
-    const data = await requestInlineGeneration(endpoint, payload, betaKey, installId);
+    const data = await requestInlineGeneration(endpoint, payload, installId);
 
     await chrome.storage.local.set({
       [lastResultStorageKey]: {
@@ -1389,11 +1386,10 @@ function sanitizeInlinePageContext(pageContext, inputText) {
   };
 }
 
-async function requestInlineGeneration(endpoint, payload, betaKey, installId) {
+async function requestInlineGeneration(endpoint, payload, installId) {
   const response = await chrome.runtime.sendMessage({
     type: "freelancer-memory:generate-reply",
     endpoint,
-    betaKey,
     installId,
     payload
   });
@@ -1454,9 +1450,18 @@ function trimInlineText(value, maxLength) {
 
 function readableInlineError(error) {
   const message = error instanceof Error ? error.message : "Something went wrong.";
+  const lowerMessage = message.toLowerCase();
 
-  if (message.includes("Failed to fetch")) {
-    return "Could not reach the Freelancer Memory API. Open the panel to check the endpoint.";
+  if (lowerMessage.includes("failed to fetch") || lowerMessage.includes("network") || lowerMessage.includes("service unavailable")) {
+    return "The reply service is unavailable right now. Open Advanced to check API settings.";
+  }
+
+  if (lowerMessage.includes("unauthorized") || lowerMessage.includes("forbidden")) {
+    return "The API rejected this request. Check the API settings.";
+  }
+
+  if (lowerMessage.includes("generation failed") || lowerMessage.includes("internal server error")) {
+    return "The reply service did not return a reply. Try again in a minute.";
   }
 
   return message;

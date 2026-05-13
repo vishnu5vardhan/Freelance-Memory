@@ -1,16 +1,10 @@
 import { NextResponse } from "next/server";
-import { requireBetaAccess } from "@/lib/api-auth";
 import { contextPacketSchema, analyzeClientResponseSchema } from "@/lib/memory";
 import { analyzeClientSchema, buildAnalyzeClientPrompt } from "@/lib/prompt";
 import { callStructuredOpenAI } from "@/lib/openai";
+import { checkDailyRateLimit, getByoOpenAIKey, getInstallId } from "@/lib/rate-limit";
 
 export async function POST(request: Request) {
-  const authError = requireBetaAccess(request);
-
-  if (authError) {
-    return authError;
-  }
-
   const json = await request.json().catch(() => null);
   const parsed = contextPacketSchema.safeParse(json);
 
@@ -18,7 +12,25 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });
   }
 
-  const apiKey = process.env.OPENAI_API_KEY;
+  const byoKey = getByoOpenAIKey(request);
+
+  if (!byoKey) {
+    const rate = await checkDailyRateLimit(getInstallId(request));
+
+    if (!rate.allowed) {
+      return NextResponse.json(
+        {
+          error: `Daily free limit reached (${rate.limit}/day). Add your OpenAI key in Advanced for unlimited.`,
+          code: "rate_limited",
+          used: rate.used,
+          limit: rate.limit
+        },
+        { status: 429 }
+      );
+    }
+  }
+
+  const apiKey = byoKey ?? process.env.OPENAI_API_KEY;
 
   if (!apiKey) {
     return NextResponse.json(

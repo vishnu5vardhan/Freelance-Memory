@@ -3,7 +3,6 @@ import { emptyFreelancerContext, type FreelancerContext, type Generation } from 
 const contextKey = "freelancer_memory_context";
 const historyKey = "freelancer_memory_history";
 const draftKey = "freelancer_memory_draft";
-const betaKey = "freelancer_memory_beta_key";
 const installIdKey = "freelancer_memory_install_id";
 
 export function loadContext(): FreelancerContext {
@@ -40,6 +39,24 @@ export function saveHistory(history: Generation[]) {
   window.localStorage.setItem(historyKey, JSON.stringify(history.slice(0, 20)));
 }
 
+export function clearContext() {
+  window.localStorage.removeItem(contextKey);
+}
+
+export function clearHistory() {
+  window.localStorage.removeItem(historyKey);
+}
+
+export function clearDraft() {
+  window.localStorage.removeItem(draftKey);
+}
+
+export function clearWorkspaceMemory() {
+  clearContext();
+  clearHistory();
+  clearDraft();
+}
+
 export function loadDraft() {
   if (typeof window === "undefined") {
     return "";
@@ -50,18 +67,6 @@ export function loadDraft() {
 
 export function saveDraft(value: string) {
   window.localStorage.setItem(draftKey, value);
-}
-
-export function loadBetaKey() {
-  if (typeof window === "undefined") {
-    return "";
-  }
-
-  return window.localStorage.getItem(betaKey) ?? "";
-}
-
-export function saveBetaKey(value: string) {
-  window.localStorage.setItem(betaKey, value);
 }
 
 export function loadInstallId() {

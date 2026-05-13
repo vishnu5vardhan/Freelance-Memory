@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Set up Freelancer Memory</title>
+    <link rel="stylesheet" href="onboarding.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <p class="eyebrow">Freelancer Memory</p>
+        <h1>Set up your freelance memory</h1>
+        <p>This takes 2 minutes. The extension uses this to write replies that sound like you.</p>
+      </section>
+
+      <form id="memoryForm" class="panel">
+        <div class="grid two">
+          <label class="field">
+            <span>What do you do?</span>
+            <textarea data-field="role" rows="2" placeholder="Webflow developer for B2B SaaS teams"></textarea>
+          </label>
+          <label class="field">
+            <span>What do you sell?</span>
+            <textarea data-field="services" rows="3" placeholder="Landing pages, Webflow builds, conversion audits"></textarea>
+          </label>
+        </div>
+
+        <div class="grid two">
+          <label class="field">
+            <span>How do you charge?</span>
+            <textarea data-field="pricing" rows="3" placeholder="$3k minimum, fixed scope, 50% upfront"></textarea>
+          </label>
+          <label class="field">
+            <span>How should replies sound?</span>
+            <textarea data-field="voice" rows="3" placeholder="Direct, warm, concise. No corporate fluff."></textarea>
+          </label>
+        </div>
+
+        <label class="field">
+          <span>What should the AI never agree to?</span>
+          <textarea data-field="boundaries" rows="3" placeholder="No unpaid calls, no unlimited revisions, no rush work without rush pricing"></textarea>
+        </label>
+
+        <details class="optional">
+          <summary><strong>Optional details</strong><span>Proof and payment terms.</span></summary>
+          <div class="grid two optional-grid">
+            <label class="field">
+              <span>Proof/results</span>
+              <textarea data-field="proof" rows="3" placeholder="Results, testimonials, client names, case studies"></textarea>
+            </label>
+            <label class="field">
+              <span>Payment terms</span>
+              <textarea data-field="paymentTerms" rows="3" placeholder="50% upfront, Stripe invoice, net 7"></textarea>
+            </label>
+          </div>
+        </details>
+
+        <button id="saveButton" class="button primary" type="submit">Save memory</button>
+        <p id="statusText" class="hint" role="status" aria-live="polite">
+          Your memory is saved locally in Chrome. Client text is only used when you generate a reply.
+        </p>
+      </form>
+
+      <section id="nextSteps" class="panel next" hidden>
+        <div>
+          <p class="eyebrow">What next</p>
+          <h2>Generate your first reply</h2>
+        </div>
+        <ol>
+          <li>Open Gmail, LinkedIn, Upwork, Fiverr, or WhatsApp Web</li>
+          <li>Highlight a client message</li>
+          <li>Click the FM button</li>
+          <li>Generate a reply</li>
+        </ol>
+        <div class="actions">
+          <button id="openGmailButton" class="button secondary" type="button">Open Gmail</button>
+        </div>
+        <p class="hint">Freelancer Memory never sends messages automatically. You always review before copy or insert.</p>
+      </section>
+    </main>
+
+    <script src="onboarding.js"></script>
+  </body>
+</html>
